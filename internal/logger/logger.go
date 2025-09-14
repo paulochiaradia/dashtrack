@@ -14,13 +14,13 @@ func InitLogger() error {
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.EncoderConfig.CallerKey = "caller"
 	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
-	
+
 	var err error
 	Logger, err = config.Build(zap.AddCaller(), zap.AddCallerSkip(1))
 	if err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 

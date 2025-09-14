@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/rubenv/sql-migrate"
+	migrate "github.com/rubenv/sql-migrate"
 )
 
 // TestConfig holds the test configuration
@@ -30,7 +30,7 @@ func NewTestConfig() *TestConfig {
 // SetupTestDatabase creates a test database and runs migrations
 func SetupTestDatabase(t *testing.T) (*sql.DB, func()) {
 	config := NewTestConfig()
-	
+
 	db, err := sql.Open("pgx", config.DatabaseURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
@@ -63,14 +63,14 @@ func SetupTestDatabase(t *testing.T) (*sql.DB, func()) {
 // TruncateTables truncates all tables for clean test state
 func TruncateTables(db *sql.DB) error {
 	tables := []string{"auth_logs", "user_sessions", "users", "roles"}
-	
+
 	for _, table := range tables {
 		_, err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", table))
 		if err != nil {
 			return fmt.Errorf("failed to truncate table %s: %v", table, err)
 		}
 	}
-	
+
 	return nil
 }
 
