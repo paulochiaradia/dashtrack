@@ -61,14 +61,14 @@ func BenchmarkCreateUser(b *testing.B) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var createReq models.CreateUserRequest
 		json.NewDecoder(r.Body).Decode(&createReq)
-		
+
 		user := models.User{
 			ID:     uuid.New(),
 			Name:   createReq.Name,
 			Email:  createReq.Email,
 			Active: true,
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(user)

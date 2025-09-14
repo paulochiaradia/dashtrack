@@ -27,7 +27,7 @@ func TestRoleHandlers(t *testing.T) {
 	t.Run("GetRoles", func(t *testing.T) {
 		// Mock the database query
 		rows := sqlmock.NewRows([]string{"id", "name", "description", "created_at", "updated_at"})
-		
+
 		adminID := uuid.New()
 		driverID := uuid.New()
 		helperID := uuid.New()
@@ -46,7 +46,7 @@ func TestRoleHandlers(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		
+
 		var roles []models.Role
 		err = json.Unmarshal(rr.Body.Bytes(), &roles)
 		require.NoError(t, err)

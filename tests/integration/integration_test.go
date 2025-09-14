@@ -23,18 +23,18 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 	// This would normally setup the entire application
 	// For now, we'll create a simple test server
 	mux := http.NewServeMux()
-	
+
 	// Health endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
-			"status":  "ok",
-			"message": "API is running",
+			"status":   "ok",
+			"message":  "API is running",
 			"database": "connected",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	})
-	
+
 	// Roles endpoint
 	mux.HandleFunc("/roles", func(w http.ResponseWriter, r *http.Request) {
 		roles := []models.Role{
@@ -57,7 +57,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(roles)
 	})
-	
+
 	// Users endpoints
 	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -79,7 +79,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			
+
 			roleID, _ := uuid.Parse(createReq.RoleID)
 			user := models.User{
 				ID:     uuid.New(),
@@ -89,13 +89,13 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 				RoleID: roleID,
 				Active: true,
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(user)
 		}
 	})
-	
+
 	suite.server = httptest.NewServer(mux)
 }
 
@@ -107,13 +107,13 @@ func (suite *IntegrationTestSuite) TestHealthEndpoint() {
 	resp, err := http.Get(suite.server.URL + "/health")
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
-	
+
 	var response map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	require.NoError(suite.T(), err)
-	
+
 	assert.Equal(suite.T(), "ok", response["status"])
 	assert.Equal(suite.T(), "API is running", response["message"])
 }
@@ -122,13 +122,13 @@ func (suite *IntegrationTestSuite) TestGetRoles() {
 	resp, err := http.Get(suite.server.URL + "/roles")
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
-	
+
 	var roles []models.Role
 	err = json.NewDecoder(resp.Body).Decode(&roles)
 	require.NoError(suite.T(), err)
-	
+
 	assert.Len(suite.T(), roles, 3)
 	assert.Equal(suite.T(), "admin", roles[0].Name)
 	assert.Equal(suite.T(), "driver", roles[1].Name)
@@ -139,13 +139,13 @@ func (suite *IntegrationTestSuite) TestGetUsers() {
 	resp, err := http.Get(suite.server.URL + "/users")
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
-	
+
 	var users []models.User
 	err = json.NewDecoder(resp.Body).Decode(&users)
 	require.NoError(suite.T(), err)
-	
+
 	assert.Len(suite.T(), users, 1)
 	assert.Equal(suite.T(), "Admin User", users[0].Name)
 }
@@ -158,10 +158,10 @@ func (suite *IntegrationTestSuite) TestCreateUser() {
 		Phone:    "987654321",
 		RoleID:   uuid.New().String(),
 	}
-	
+
 	body, err := json.Marshal(createReq)
 	require.NoError(suite.T(), err)
-	
+
 	resp, err := http.Post(
 		suite.server.URL+"/users",
 		"application/json",
@@ -169,13 +169,13 @@ func (suite *IntegrationTestSuite) TestCreateUser() {
 	)
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	assert.Equal(suite.T(), http.StatusCreated, resp.StatusCode)
-	
+
 	var user models.User
 	err = json.NewDecoder(resp.Body).Decode(&user)
 	require.NoError(suite.T(), err)
-	
+
 	assert.Equal(suite.T(), createReq.Name, user.Name)
 	assert.Equal(suite.T(), createReq.Email, user.Email)
 	assert.NotEmpty(suite.T(), user.ID)
@@ -186,35 +186,35 @@ func (suite *IntegrationTestSuite) TestCORSHeaders() {
 	require.NoError(suite.T(), err)
 	req.Header.Set("Origin", "http://localhost:3000")
 	req.Header.Set("Access-Control-Request-Method", "GET")
-	
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	// Note: CORS headers would be tested here if implemented
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
 }
 
 func (suite *IntegrationTestSuite) TestAPIEndpointsFlow() {
 	// Test the complete flow: Health -> Roles -> Create User -> Get Users
-	
+
 	// 1. Check health
 	resp, err := http.Get(suite.server.URL + "/health")
 	require.NoError(suite.T(), err)
 	resp.Body.Close()
 	assert.Equal(suite.T(), http.StatusOK, resp.StatusCode)
-	
+
 	// 2. Get roles
 	resp, err = http.Get(suite.server.URL + "/roles")
 	require.NoError(suite.T(), err)
-	
+
 	var roles []models.Role
 	err = json.NewDecoder(resp.Body).Decode(&roles)
 	require.NoError(suite.T(), err)
 	resp.Body.Close()
 	assert.NotEmpty(suite.T(), roles)
-	
+
 	// 3. Create user with first role
 	createReq := models.CreateUserRequest{
 		Name:     "Flow Test User",
@@ -223,10 +223,10 @@ func (suite *IntegrationTestSuite) TestAPIEndpointsFlow() {
 		Phone:    "111222333",
 		RoleID:   roles[0].ID.String(),
 	}
-	
+
 	body, err := json.Marshal(createReq)
 	require.NoError(suite.T(), err)
-	
+
 	resp, err = http.Post(
 		suite.server.URL+"/users",
 		"application/json",
@@ -235,12 +235,12 @@ func (suite *IntegrationTestSuite) TestAPIEndpointsFlow() {
 	require.NoError(suite.T(), err)
 	resp.Body.Close()
 	assert.Equal(suite.T(), http.StatusCreated, resp.StatusCode)
-	
+
 	// 4. Verify user was created
 	resp, err = http.Get(suite.server.URL + "/users")
 	require.NoError(suite.T(), err)
 	defer resp.Body.Close()
-	
+
 	var users []models.User
 	err = json.NewDecoder(resp.Body).Decode(&users)
 	require.NoError(suite.T(), err)

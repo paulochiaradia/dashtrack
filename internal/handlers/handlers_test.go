@@ -25,7 +25,7 @@ func TestHealthHandler(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
-			"status": "ok",
+			"status":  "ok",
 			"message": "API is running",
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -35,7 +35,7 @@ func TestHealthHandler(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	
+
 	var response map[string]interface{}
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	require.NoError(t, err)
@@ -85,9 +85,9 @@ func TestUserHandlers(t *testing.T) {
 		t.Logf("Response body: %s", rr.Body.String())
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		
+
 		var response struct {
-			Users []models.User `json:"users"`
+			Users      []models.User `json:"users"`
 			Pagination struct {
 				Limit  int `json:"limit"`
 				Offset int `json:"offset"`
@@ -125,7 +125,7 @@ func TestUserHandlers(t *testing.T) {
 				sql.NullString{}, // cpf
 				sql.NullString{}, // avatar
 				userRequest.RoleID,
-				true, // active
+				true,             // active
 				sqlmock.AnyArg(), // created_at
 				sqlmock.AnyArg(), // updated_at
 			).
@@ -153,7 +153,7 @@ func TestUserHandlers(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusCreated, rr.Code)
-		
+
 		var user models.User
 		err = json.Unmarshal(rr.Body.Bytes(), &user)
 		require.NoError(t, err)
@@ -187,14 +187,14 @@ func TestUserHandlers(t *testing.T) {
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
-		
+
 		// Setup router to handle path parameter
 		router := mux.NewRouter()
 		router.HandleFunc("/users/{id}", userHandler.GetUser).Methods("GET")
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		
+
 		var user models.User
 		err = json.Unmarshal(rr.Body.Bytes(), &user)
 		require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestUserHandlers(t *testing.T) {
 	t.Run("UpdateUser", func(t *testing.T) {
 		userID := uuid.New()
 		roleID := uuid.New()
-		
+
 		updateRequest := models.UpdateUserRequest{
 			Name:  "Updated User",
 			Email: "updated@example.com",
@@ -246,14 +246,14 @@ func TestUserHandlers(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 
 		rr := httptest.NewRecorder()
-		
+
 		// Setup router to handle path parameter
 		router := mux.NewRouter()
 		router.HandleFunc("/users/{id}", userHandler.UpdateUser).Methods("PUT")
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		
+
 		var user models.User
 		err = json.Unmarshal(rr.Body.Bytes(), &user)
 		require.NoError(t, err)
@@ -272,14 +272,14 @@ func TestUserHandlers(t *testing.T) {
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
-		
+
 		// Setup router to handle path parameter
 		router := mux.NewRouter()
 		router.HandleFunc("/users/{id}", userHandler.DeleteUser).Methods("DELETE")
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		
+
 		var response map[string]interface{}
 		err = json.Unmarshal(rr.Body.Bytes(), &response)
 		require.NoError(t, err)
