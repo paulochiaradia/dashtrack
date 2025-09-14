@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"log"
 
-	migrate "github.com/rubenv/sql-migrate"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	migrate "github.com/rubenv/sql-migrate"
 )
 
 // NewDatabase creates and returns a new database connection pool.

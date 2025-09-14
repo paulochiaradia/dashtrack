@@ -24,7 +24,7 @@ func (r *AuthLogRepository) Create(log *models.AuthLog) error {
 		INSERT INTO auth_logs (id, user_id, email_attempt, success, ip_address, user_agent, failure_reason)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at`
-	
+
 	return r.db.QueryRow(
 		query,
 		log.ID,
@@ -43,7 +43,7 @@ func (r *AuthLogRepository) GetRecentFailedAttempts(email string, since time.Tim
 		SELECT COUNT(*) 
 		FROM auth_logs 
 		WHERE email_attempt = $1 AND success = false AND created_at >= $2`
-	
+
 	var count int
 	err := r.db.QueryRow(query, email, since).Scan(&count)
 	return count, err
@@ -57,13 +57,13 @@ func (r *AuthLogRepository) GetLoginHistory(userID uuid.UUID, limit, offset int)
 		WHERE user_id = $1 
 		ORDER BY created_at DESC 
 		LIMIT $2 OFFSET $3`
-	
+
 	rows, err := r.db.Query(query, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var logs []*models.AuthLog
 	for rows.Next() {
 		log := &models.AuthLog{}
@@ -82,6 +82,6 @@ func (r *AuthLogRepository) GetLoginHistory(userID uuid.UUID, limit, offset int)
 		}
 		logs = append(logs, log)
 	}
-	
+
 	return logs, rows.Err()
 }
