@@ -39,14 +39,14 @@ type User struct {
 
 // UserSession represents a user session
 type UserSession struct {
-	ID          string     `json:"id" db:"id"`
-	UserID      uuid.UUID  `json:"user_id" db:"user_id"`
-	IPAddress   *string    `json:"ip_address" db:"ip_address"`
-	UserAgent   *string    `json:"user_agent" db:"user_agent"`
-	SessionData *string    `json:"session_data" db:"session_data"` // JSON stored as string
-	ExpiresAt   time.Time  `json:"expires_at" db:"expires_at"`
-	Active      bool       `json:"active" db:"active"`
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	ID          string    `json:"id" db:"id"`
+	UserID      uuid.UUID `json:"user_id" db:"user_id"`
+	IPAddress   *string   `json:"ip_address" db:"ip_address"`
+	UserAgent   *string   `json:"user_agent" db:"user_agent"`
+	SessionData *string   `json:"session_data" db:"session_data"` // JSON stored as string
+	ExpiresAt   time.Time `json:"expires_at" db:"expires_at"`
+	Active      bool      `json:"active" db:"active"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
 // AuthLog represents an authentication attempt log

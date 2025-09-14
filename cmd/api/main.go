@@ -37,7 +37,7 @@ func main() {
 
 	// Observability endpoints
 	mux.Handle("/metrics", promhttp.Handler()) // Prometheus metrics
-	
+
 	// Health check with more details
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
