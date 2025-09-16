@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
+	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/config"
 	"github.com/paulochiaradia/dashtrack/internal/database"
 	"github.com/paulochiaradia/dashtrack/internal/handlers"
@@ -28,9 +31,18 @@ func main() {
 	roleRepo := repository.NewRoleRepository(db)
 	// authLogRepo := repository.NewAuthLogRepository(db) // TODO: Use for authentication logging
 
+	// Initialize JWT manager
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your-super-secret-jwt-key-change-in-production" // Default for development
+		log.Println("Warning: Using default JWT secret. Set JWT_SECRET environment variable in production.")
+	}
+	jwtManager := auth.NewJWTManager(jwtSecret, 15*time.Minute, 24*time.Hour, "dashtrack-api")
+
 	// Initialize handlers
 	userHandler := handlers.NewUserHandler(userRepo, roleRepo)
 	roleHandler := handlers.NewRoleHandler(roleRepo)
+	authHandler := handlers.NewAuthHandler(userRepo, jwtManager)
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -50,8 +62,18 @@ func main() {
 		}`, "2023-01-01T00:00:00Z") // TODO: Use actual timestamp
 	})
 
-	// User routes
-	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
+	// Authentication routes (public)
+	mux.HandleFunc("/auth/login", authHandler.Login)
+	mux.HandleFunc("/auth/refresh", authHandler.RefreshToken)
+	mux.HandleFunc("/auth/logout", authHandler.Logout)
+
+	// User profile routes (authenticated)
+	authMiddleware := auth.NewAuthMiddleware(jwtManager)
+	mux.Handle("/profile", authMiddleware.RequireAuth(http.HandlerFunc(authHandler.Me)))
+	mux.Handle("/profile/change-password", authMiddleware.RequireAuth(http.HandlerFunc(authHandler.ChangePassword)))
+
+	// Admin routes (admin only)
+	mux.Handle("/admin/users", authMiddleware.RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			userHandler.ListUsers(w, r)
@@ -60,11 +82,11 @@ func main() {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-	})
+	})))
 
-	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/admin/users/", authMiddleware.RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract ID from path
-		path := strings.TrimPrefix(r.URL.Path, "/users/")
+		path := strings.TrimPrefix(r.URL.Path, "/admin/users/")
 		if path == "" {
 			http.Error(w, "User ID required", http.StatusBadRequest)
 			return
@@ -80,16 +102,25 @@ func main() {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-	})
+	})))
 
-	// Role routes
-	mux.HandleFunc("/roles", func(w http.ResponseWriter, r *http.Request) {
+	// Manager routes (admin and manager only)
+	mux.Handle("/manager/users", authMiddleware.RequireAnyRole("admin", "manager")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			userHandler.ListUsers(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+
+	// Role routes (authenticated users can view roles)
+	mux.Handle("/roles", authMiddleware.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			roleHandler.ListRoles(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-	})
+	})))
 
 	// CORS middleware
 	corsHandler := func(h http.Handler) http.Handler {
@@ -114,16 +145,27 @@ func main() {
 
 	log.Printf("Server starting on port %s", cfg.APIPort)
 	log.Printf("Database connected successfully")
+	log.Printf("JWT authentication enabled")
 	log.Printf("Observability enabled - metrics available at /metrics")
 	log.Printf("Available endpoints:")
-	log.Printf("  GET    /health")
-	log.Printf("  GET    /metrics")
-	log.Printf("  GET    /roles")
-	log.Printf("  GET    /users")
-	log.Printf("  POST   /users")
-	log.Printf("  GET    /users/{id}")
-	log.Printf("  PUT    /users/{id}")
-	log.Printf("  DELETE /users/{id}")
+	log.Printf("  Public endpoints:")
+	log.Printf("    GET    /health")
+	log.Printf("    GET    /metrics")
+	log.Printf("    POST   /auth/login")
+	log.Printf("    POST   /auth/refresh")
+	log.Printf("    POST   /auth/logout")
+	log.Printf("  Authenticated endpoints:")
+	log.Printf("    GET    /profile")
+	log.Printf("    POST   /profile/change-password")
+	log.Printf("    GET    /roles")
+	log.Printf("  Manager endpoints (admin/manager):")
+	log.Printf("    GET    /manager/users")
+	log.Printf("  Admin endpoints (admin only):")
+	log.Printf("    GET    /admin/users")
+	log.Printf("    POST   /admin/users")
+	log.Printf("    GET    /admin/users/{id}")
+	log.Printf("    PUT    /admin/users/{id}")
+	log.Printf("    DELETE /admin/users/{id}")
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("could not start server: %s\n", err)
