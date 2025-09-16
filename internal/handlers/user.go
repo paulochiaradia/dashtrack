@@ -198,41 +198,14 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build update map
-	updates := make(map[string]interface{})
-	if req.Name != "" {
-		updates["name"] = req.Name
-	}
-	if req.Email != "" {
-		updates["email"] = req.Email
-	}
-	if req.Phone != "" {
-		updates["phone"] = req.Phone
-	}
-	if req.CPF != "" {
-		updates["cpf"] = req.CPF
-	}
-	if req.Avatar != "" {
-		updates["avatar"] = req.Avatar
-	}
-	if req.Active != nil {
-		updates["active"] = *req.Active
-	}
-	if req.DashboardConfig != "" {
-		updates["dashboard_config"] = req.DashboardConfig
-	}
-
-	if len(updates) == 0 {
-		http.Error(w, "No fields to update", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.userRepo.Update(id, updates); err != nil {
+	updatedUser, err := h.userRepo.Update(id, req)
+	if err != nil {
 		http.Error(w, "Failed to update user", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedUser)
 }
 
 // DeleteUser handles DELETE /users/{id}
