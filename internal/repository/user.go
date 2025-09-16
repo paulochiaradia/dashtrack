@@ -10,6 +10,19 @@ import (
 	"github.com/paulochiaradia/dashtrack/internal/models"
 )
 
+// UserRepositoryInterface defines the contract for user repository
+type UserRepositoryInterface interface {
+	Create(user *models.User) error
+	GetByID(id uuid.UUID) (*models.User, error)
+	GetByEmail(email string) (*models.User, error)
+	Update(id uuid.UUID, updateReq models.UpdateUserRequest) (*models.User, error)
+	UpdatePassword(id uuid.UUID, hashedPassword string) error
+	Delete(id uuid.UUID) error
+	List(limit, offset int, active *bool, roleID *uuid.UUID) ([]*models.User, error)
+	UpdateLoginAttempts(id uuid.UUID, attempts int, blockedUntil *time.Time) error
+	UpdateLastLogin(id uuid.UUID) error
+}
+
 // UserRepository handles user database operations
 type UserRepository struct {
 	db *sql.DB
@@ -134,27 +147,79 @@ func (r *UserRepository) GetByEmail(email string) (*models.User, error) {
 }
 
 // Update updates user information
-func (r *UserRepository) Update(id uuid.UUID, updates map[string]interface{}) error {
-	if len(updates) == 0 {
-		return fmt.Errorf("no fields to update")
-	}
-
-	// Build dynamic query
-	setParts := make([]string, 0, len(updates))
-	args := make([]interface{}, 0, len(updates)+1)
+func (r *UserRepository) Update(id uuid.UUID, updateReq models.UpdateUserRequest) (*models.User, error) {
+	// Build dynamic query based on provided fields
+	var setParts []string
+	var args []interface{}
 	argIndex := 1
 
-	for field, value := range updates {
-		setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argIndex))
-		args = append(args, value)
+	if updateReq.Name != "" {
+		setParts = append(setParts, fmt.Sprintf("name = $%d", argIndex))
+		args = append(args, updateReq.Name)
+		argIndex++
+	}
+	if updateReq.Email != "" {
+		setParts = append(setParts, fmt.Sprintf("email = $%d", argIndex))
+		args = append(args, updateReq.Email)
+		argIndex++
+	}
+	if updateReq.Phone != "" {
+		setParts = append(setParts, fmt.Sprintf("phone = $%d", argIndex))
+		args = append(args, &updateReq.Phone)
+		argIndex++
+	}
+	if updateReq.CPF != "" {
+		setParts = append(setParts, fmt.Sprintf("cpf = $%d", argIndex))
+		args = append(args, &updateReq.CPF)
+		argIndex++
+	}
+	if updateReq.Avatar != "" {
+		setParts = append(setParts, fmt.Sprintf("avatar = $%d", argIndex))
+		args = append(args, &updateReq.Avatar)
+		argIndex++
+	}
+	if updateReq.DashboardConfig != "" {
+		setParts = append(setParts, fmt.Sprintf("dashboard_config = $%d", argIndex))
+		args = append(args, &updateReq.DashboardConfig)
+		argIndex++
+	}
+	if updateReq.Active != nil {
+		setParts = append(setParts, fmt.Sprintf("active = $%d", argIndex))
+		args = append(args, *updateReq.Active)
 		argIndex++
 	}
 
+	if len(setParts) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+
+	// Always update the updated_at field
+	setParts = append(setParts, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Build and execute update query
 	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d",
-		fmt.Sprintf("%s", setParts), argIndex)
+		strings.Join(setParts, ", "), argIndex)
 	args = append(args, id)
 
 	_, err := r.db.Exec(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return updated user
+	return r.GetByID(id)
+}
+
+// UpdatePassword updates only the user's password and password_changed_at timestamp
+func (r *UserRepository) UpdatePassword(id uuid.UUID, hashedPassword string) error {
+	query := `
+		UPDATE users 
+		SET password = $1, password_changed_at = $2, updated_at = $3 
+		WHERE id = $4`
+
+	_, err := r.db.Exec(query, hashedPassword, time.Now(), time.Now(), id)
 	return err
 }
 
