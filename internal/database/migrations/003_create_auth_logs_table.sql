@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS auth_logs (
 );
 
 -- Create indexes for auth_logs table
-CREATE INDEX idx_auth_logs_user_created ON auth_logs(user_id, created_at);
-CREATE INDEX idx_auth_logs_email_created ON auth_logs(email_attempt, created_at);
-CREATE INDEX idx_auth_logs_success_created ON auth_logs(success, created_at);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_user_created ON auth_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_email_created ON auth_logs(email_attempt, created_at);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_success_created ON auth_logs(success, created_at);
 
 -- +migrate Down
 DROP INDEX IF EXISTS idx_auth_logs_success_created;

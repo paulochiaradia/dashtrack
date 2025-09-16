@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 );
 
 -- Create indexes for user_sessions table
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
-CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
-CREATE INDEX idx_user_sessions_user_active ON user_sessions(user_id, active);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active ON user_sessions(user_id, active);
 
 -- +migrate Down
 DROP INDEX IF EXISTS idx_user_sessions_user_active;
