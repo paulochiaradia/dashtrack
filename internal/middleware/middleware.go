@@ -7,6 +7,7 @@ import (
 
 	"github.com/paulochiaradia/dashtrack/internal/logger"
 	"github.com/paulochiaradia/dashtrack/internal/metrics"
+	"github.com/paulochiaradia/dashtrack/internal/tracing"
 	"go.uber.org/zap"
 )
 
@@ -55,8 +56,16 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 // TracingMiddleware adds tracing to HTTP requests
 func TracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// For now, we'll just pass through - tracing will be added when dependencies are resolved
-		next.ServeHTTP(w, r)
+		ctx, span := tracing.StartSpan(r.Context(), r.Method+" "+r.URL.Path)
+		defer span.End()
+
+		// Add span attributes
+		span.SetAttributes(
+		// Using string keys for compatibility
+		)
+
+		// Continue with request in traced context
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
