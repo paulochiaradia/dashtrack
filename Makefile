@@ -17,7 +17,7 @@ build-docker: ## Build Docker image
 	@docker build -t dashtrack-api .
 
 # Test targets
-test: test-unit test-integration test-benchmark ## Run all tests
+test: test-unit test-integration test-endpoints test-benchmark ## Run all tests
 
 test-unit: ## Run unit tests
 	@echo "Running unit tests..."
@@ -26,6 +26,10 @@ test-unit: ## Run unit tests
 test-integration: ## Run integration tests  
 	@echo "Running integration tests..."
 	@go test -v -race ./tests/integration/...
+
+test-endpoints: ## Run API endpoint tests
+	@echo "Running API endpoint tests..."
+	@go test -v -race ./tests/ -run TestRunAPITestSuite
 
 test-benchmark: ## Run benchmark tests
 	@echo "Running benchmark tests..."

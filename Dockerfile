@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,14 +16,28 @@ COPY . .
 # CGO_ENABLED=0: disable CGO for a statically linked binary
 RUN CGO_ENABLED=0 go build -o /app/main ./cmd/api
 
-# Stage 2: Development stage (simplified without air for now)
-FROM builder AS dev
+# Stage 2: Development stage with Air for hot reload
+FROM golang:1.24-alpine AS dev
+
+WORKDIR /app
+
+# Install air for hot reloading
+RUN go install github.com/air-verse/air@v1.60.0
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download all dependencies
+RUN go mod download
+
+# Copy the source code
+COPY . .
 
 # Expose port 8080
 EXPOSE 8080
 
-# Command to run the application directly
-CMD ["/app/main"]
+# Command to run air for hot reloading
+CMD ["air", "-c", ".air.toml"]
 
 # Stage 3: Production stage
 FROM alpine:latest AS production

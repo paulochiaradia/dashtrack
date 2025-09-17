@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Development files
+tmp/
+.air.toml
+air.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test files
+*_test.go
+testdata/
+
+# Documentation
+docs/
+
+# Environment files (should be handled via compose/k8s)
+.env
