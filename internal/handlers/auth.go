@@ -13,8 +13,10 @@ import (
 
 // AuthHandler handles authentication-related requests
 type AuthHandler struct {
-	userRepo   repository.UserRepositoryInterface
-	jwtManager *auth.JWTManager
+	userRepo    repository.UserRepositoryInterface
+	authLogRepo repository.AuthLogRepositoryInterface
+	jwtManager  *auth.JWTManager
+	bcryptCost  int
 }
 
 // LoginRequest represents login request payload
@@ -44,20 +46,22 @@ type RefreshTokenResponse struct {
 
 // UserResponse represents user data in responses (no sensitive info)
 type UserResponse struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone,omitempty"`
-	Role     string `json:"role"`
-	Active   bool   `json:"active"`
-	Avatar   string `json:"avatar,omitempty"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Phone  string `json:"phone,omitempty"`
+	Role   string `json:"role"`
+	Active bool   `json:"active"`
+	Avatar string `json:"avatar,omitempty"`
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(userRepo repository.UserRepositoryInterface, jwtManager *auth.JWTManager) *AuthHandler {
+func NewAuthHandler(userRepo repository.UserRepositoryInterface, authLogRepo repository.AuthLogRepositoryInterface, jwtManager *auth.JWTManager, bcryptCost int) *AuthHandler {
 	return &AuthHandler{
-		userRepo:   userRepo,
-		jwtManager: jwtManager,
+		userRepo:    userRepo,
+		authLogRepo: authLogRepo,
+		jwtManager:  jwtManager,
+		bcryptCost:  bcryptCost,
 	}
 }
 
@@ -224,7 +228,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// In a stateless JWT system, logout is mainly handled client-side
 	// Here we could implement token blacklisting if needed in the future
-	
+
 	response := map[string]string{
 		"message": "Successfully logged out",
 	}
