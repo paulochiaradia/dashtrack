@@ -38,6 +38,10 @@ func InitTracing(serviceName string, jaegerURL string) error {
 
 // StartSpan starts a new span with the given name and context
 func StartSpan(ctx context.Context, name string) (context.Context, trace.Span) {
+	if tracer == nil {
+		// Return a no-op span if tracer is not initialized
+		return ctx, trace.SpanFromContext(ctx)
+	}
 	return tracer.Start(ctx, name)
 }
 
