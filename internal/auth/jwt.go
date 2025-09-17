@@ -19,6 +19,18 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
+// ToUserContext converts JWTClaims to UserContext
+func (j *JWTClaims) ToUserContext() UserContext {
+	return UserContext{
+		UserID:   j.UserID,
+		Email:    j.Email,
+		Name:     j.Name,
+		RoleID:   j.RoleID,
+		RoleName: j.RoleName,
+		TenantID: j.TenantID,
+	}
+}
+
 // UserContext represents authenticated user context
 type UserContext struct {
 	UserID   uuid.UUID  `json:"user_id"`
@@ -90,7 +102,7 @@ func (j *JWTManager) GenerateTokens(userContext UserContext) (accessToken, refre
 	return accessToken, refreshToken, nil
 }
 
-// ValidateToken validates and parses a JWT token
+// ValidateToken validates and parses a JWT token (access token)
 func (j *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -139,20 +151,20 @@ func (j *JWTManager) ValidateRefreshToken(tokenString string) (uuid.UUID, error)
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, errors.New("invalid user ID in token")
+		return uuid.Nil, errors.New("invalid user ID in refresh token")
 	}
 
 	return userID, nil
 }
 
-// ExtractUserFromToken extracts user context from validated token
-func (claims *JWTClaims) ToUserContext() UserContext {
-	return UserContext{
-		UserID:   claims.UserID,
-		Email:    claims.Email,
-		Name:     claims.Name,
-		RoleID:   claims.RoleID,
-		RoleName: claims.RoleName,
-		TenantID: claims.TenantID,
+// RefreshToken creates new tokens using a valid refresh token
+func (j *JWTManager) RefreshToken(refreshTokenString string, userContext UserContext) (string, string, error) {
+	// Validate the refresh token first
+	_, err := j.ValidateRefreshToken(refreshTokenString)
+	if err != nil {
+		return "", "", err
 	}
+
+	// Generate new tokens
+	return j.GenerateTokens(userContext)
 }
