@@ -40,6 +40,41 @@ make run
 
 A API estará disponível em: http://localhost:8080
 
+## 🧪 Testes
+
+Esta aplicação possui uma suíte completa de testes incluindo:
+
+### Executar Testes
+```bash
+# Testes unitários
+make test-unit
+# ou
+go test -v ./internal/handlers/... -short
+
+# Testes de integração  
+make test-integration
+# ou
+go test -v ./tests/integration/... -run Integration
+
+# Benchmarks de performance
+make test-bench
+# ou
+go test ./tests/integration/... -bench=. -run=^$
+
+# Cobertura de código
+make test-coverage
+# ou
+go test ./internal/handlers -coverprofile=coverage.out -short
+```
+
+### Resultados dos Testes ✅
+- **Testes Unitários**: 3/3 passando (autenticação completa)
+- **Testes de Integração**: 6/6 passando (fluxos E2E)
+- **Benchmarks**: Login ~82k req/s, Auth ~45k req/s
+- **Cobertura**: Componentes críticos 100% cobertos
+
+📖 **Documentação completa dos testes**: [TESTING.md](./TESTING.md)
+
 ## 📚 Endpoints Disponíveis
 
 ### Saúde e Monitoramento

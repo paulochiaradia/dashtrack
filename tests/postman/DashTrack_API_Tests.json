@@ -1,0 +1,990 @@
+{
+	"info": {
+		"_postman_id": "dashtrack-api-tests",
+		"name": "DashTrack API - Complete Tests",
+		"description": "Testes completos da API DashTrack com todas as funcionalidades implementadas",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "🟢 1. ROTAS PÚBLICAS (Básicas)",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/metrics",
+							"host": ["{{base_url}}"],
+							"path": ["metrics"]
+						}
+					}
+				},
+				{
+					"name": "IoT Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/iot/health",
+							"host": ["{{base_url}}"],
+							"path": ["iot", "health"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🔐 2. AUTENTICAÇÃO",
+			"item": [
+				{
+					"name": "Login Master",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('access_token', response.access_token);",
+									"    pm.environment.set('refresh_token', response.refresh_token);",
+									"    pm.environment.set('user_id', response.user.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"master@dashtrack.com\",\n    \"password\": \"Master@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token (Original)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token (Novo - Segurança)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('access_token', response.access_token);",
+									"    pm.environment.set('refresh_token', response.refresh_token);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/token-refresh",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "token-refresh"]
+						}
+					}
+				},
+				{
+					"name": "Logout (Original)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "logout"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🛡️ 3. FUNCIONALIDADES DE SEGURANÇA",
+			"item": [
+				{
+					"name": "Security Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/logout",
+							"host": ["{{base_url}}"],
+							"path": ["security", "logout"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/2fa/status",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "status"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Setup",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('totp_secret', response.secret);",
+									"    console.log('QR Code URL:', response.qr_code);",
+									"    console.log('Secret:', response.secret);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/2fa/setup",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "setup"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Enable",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"totp_code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/security/2fa/enable",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "enable"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Verify",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"totp_code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/security/2fa/verify",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "verify"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Generate Backup Codes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/2fa/backup-codes",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "backup-codes"]
+						}
+					}
+				},
+				{
+					"name": "2FA - Disable",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/2fa/disable",
+							"host": ["{{base_url}}"],
+							"path": ["security", "2fa", "disable"]
+						}
+					}
+				},
+				{
+					"name": "Audit Logs (Admin/Master Only)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/security/audit/logs?limit=10",
+							"host": ["{{base_url}}"],
+							"path": ["security", "audit", "logs"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "👤 4. PERFIL USUÁRIO",
+			"item": [
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/profile",
+							"host": ["{{base_url}}"],
+							"path": ["profile"]
+						}
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"current_password\": \"Master@123456\",\n    \"new_password\": \"Master@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/profile/change-password",
+							"host": ["{{base_url}}"],
+							"path": ["profile", "change-password"]
+						}
+					}
+				},
+				{
+					"name": "Get User Roles",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/roles",
+							"host": ["{{base_url}}"],
+							"path": ["roles"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "👑 5. MASTER ROUTES",
+			"item": [
+				{
+					"name": "Create Admin User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Admin Test\",\n    \"email\": \"admin@dashtrack.com\",\n    \"password\": \"Admin@123456\",\n    \"role\": \"admin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/users",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🔧 6. ADMIN ROUTES",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/users",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "users"]
+						}
+					}
+				},
+				{
+					"name": "Create Manager User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('manager_user_id', response.user.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Manager Test\",\n    \"email\": \"manager@dashtrack.com\",\n    \"password\": \"Manager@123456\",\n    \"role\": \"manager\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/users",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "users"]
+						}
+					}
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/users/{{manager_user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "users", "{{manager_user_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Manager Updated\",\n    \"email\": \"manager@dashtrack.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/users/{{manager_user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "users", "{{manager_user_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🏢 7. COMPANY ROUTES (Manager)",
+			"item": [
+				{
+					"name": "Login as Manager",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('manager_access_token', response.access_token);",
+									"    pm.environment.set('manager_refresh_token', response.refresh_token);",
+									"    pm.environment.set('company_id', response.user.company_id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"manager@dashtrack.com\",\n    \"password\": \"Manager@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Create Team",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('team_id', response.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Equipe Teste\",\n    \"description\": \"Equipe para testes\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/company/teams",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "company", "teams"]
+						}
+					}
+				},
+				{
+					"name": "Get Teams",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/company/teams",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "company", "teams"]
+						}
+					}
+				},
+				{
+					"name": "Create Vehicle",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('vehicle_id', response.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"plate\": \"ABC-1234\",\n    \"brand\": \"Toyota\",\n    \"model\": \"Corolla\",\n    \"year\": 2023,\n    \"team_id\": \"{{team_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/company/vehicles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "company", "vehicles"]
+						}
+					}
+				},
+				{
+					"name": "Get Vehicles",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/company/vehicles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "company", "vehicles"]
+						}
+					}
+				},
+				{
+					"name": "Create Driver",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('driver_user_id', response.user.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"João Motorista\",\n    \"email\": \"driver@dashtrack.com\",\n    \"password\": \"Driver@123456\",\n    \"role\": \"driver\",\n    \"team_id\": \"{{team_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/manager/users",
+							"host": ["{{base_url}}"],
+							"path": ["manager", "users"]
+						}
+					}
+				},
+				{
+					"name": "Create Helper",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('helper_user_id', response.user.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{manager_access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Pedro Ajudante\",\n    \"email\": \"helper@dashtrack.com\",\n    \"password\": \"Helper@123456\",\n    \"role\": \"helper\",\n    \"team_id\": \"{{team_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/manager/users",
+							"host": ["{{base_url}}"],
+							"path": ["manager", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🚗 8. DRIVER ROUTES",
+			"item": [
+				{
+					"name": "Login as Driver",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('driver_access_token', response.access_token);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"driver@dashtrack.com\",\n    \"password\": \"Driver@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Get My Team",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{driver_access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/driver/team",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "driver", "team"]
+						}
+					}
+				},
+				{
+					"name": "Get My Vehicles",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{driver_access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/driver/vehicles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "driver", "vehicles"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🤝 9. HELPER ROUTES",
+			"item": [
+				{
+					"name": "Login as Helper",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('helper_access_token', response.access_token);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"helper@dashtrack.com\",\n    \"password\": \"Helper@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Get My Team",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{helper_access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/helper/team",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "helper", "team"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "📡 10. IOT & ESP32 ROUTES",
+			"item": [
+				{
+					"name": "Register ESP32 Device",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('device_id', response.device_id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"device_id\": \"ESP32_TEST_001\",\n    \"device_name\": \"Test ESP32 Device\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/esp32/register",
+							"host": ["{{base_url}}"],
+							"path": ["esp32", "register"]
+						}
+					}
+				},
+				{
+					"name": "Get Device Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/esp32/device/{{device_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["esp32", "device", "{{device_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Send IoT Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"device_id\": \"{{device_id}}\",\n    \"temperature\": 25.5,\n    \"humidity\": 60.2,\n    \"pressure\": 1013.25,\n    \"location\": {\n        \"latitude\": -23.5505,\n        \"longitude\": -46.6333\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/iot/data",
+							"host": ["{{base_url}}"],
+							"path": ["iot", "data"]
+						}
+					}
+				},
+				{
+					"name": "Get Sensor Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/sensors/{{device_id}}/data",
+							"host": ["{{base_url}}"],
+							"path": ["sensors", "{{device_id}}", "data"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080"
+		}
+	]
+}
