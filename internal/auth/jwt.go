@@ -168,3 +168,53 @@ func (j *JWTManager) RefreshToken(refreshTokenString string, userContext UserCon
 	// Generate new tokens
 	return j.GenerateTokens(userContext)
 }
+
+// PasswordResetClaims represents password reset token claims
+type PasswordResetClaims struct {
+	UserID uuid.UUID `json:"user_id"`
+	Email  string    `json:"email"`
+	jwt.RegisteredClaims
+}
+
+// GeneratePasswordResetToken generates a password reset token (valid for 1 hour)
+func (j *JWTManager) GeneratePasswordResetToken(userID uuid.UUID, email string) (string, error) {
+	claims := PasswordResetClaims{
+		UserID: userID,
+		Email:  email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), // 1 hour expiry
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    j.issuer,
+			Subject:   "password_reset",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(j.secretKey)
+}
+
+// ValidatePasswordResetToken validates a password reset token and returns user info
+func (j *JWTManager) ValidatePasswordResetToken(tokenString string) (uuid.UUID, string, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &PasswordResetClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return j.secretKey, nil
+	})
+
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+
+	if !token.Valid {
+		return uuid.Nil, "", errors.New("invalid token")
+	}
+
+	claims, ok := token.Claims.(*PasswordResetClaims)
+	if !ok {
+		return uuid.Nil, "", errors.New("invalid token claims")
+	}
+
+	return claims.UserID, claims.Email, nil
+}
