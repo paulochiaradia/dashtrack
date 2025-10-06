@@ -1,11 +1,18 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/google/uuid"
 	"github.com/paulochiaradia/dashtrack/internal/models"
 )
+
+// RoleRepositoryInterface defines the contract for role repository
+type RoleRepositoryInterface interface {
+	GetAll(ctx context.Context) ([]*models.Role, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Role, error)
+}
 
 // RoleRepository handles role database operations
 type RoleRepository struct {
@@ -18,10 +25,10 @@ func NewRoleRepository(db *sql.DB) *RoleRepository {
 }
 
 // GetAll retrieves all roles
-func (r *RoleRepository) GetAll() ([]*models.Role, error) {
+func (r *RoleRepository) GetAll(ctx context.Context) ([]*models.Role, error) {
 	query := "SELECT id, name, description, created_at, updated_at FROM roles ORDER BY name"
 
-	rows, err := r.db.Query(query)
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -41,12 +48,15 @@ func (r *RoleRepository) GetAll() ([]*models.Role, error) {
 }
 
 // GetByID retrieves a role by ID
-func (r *RoleRepository) GetByID(id uuid.UUID) (*models.Role, error) {
+func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Role, error) {
 	query := "SELECT id, name, description, created_at, updated_at FROM roles WHERE id = $1"
 
 	role := &models.Role{}
-	err := r.db.QueryRow(query, id).Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 

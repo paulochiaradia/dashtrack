@@ -26,7 +26,7 @@ func (h *RoleHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := h.roleRepo.GetAll()
+	roles, err := h.roleRepo.GetAll(r.Context())
 	if err != nil {
 		http.Error(w, "Failed to list roles", http.StatusInternalServerError)
 		return
