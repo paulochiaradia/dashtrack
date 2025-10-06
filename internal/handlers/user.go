@@ -1,232 +1,224 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/paulochiaradia/dashtrack/internal/models"
-	"github.com/paulochiaradia/dashtrack/internal/repository"
+	"github.com/paulochiaradia/dashtrack/internal/services"
 )
 
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
-	userRepo *repository.UserRepository
-	roleRepo *repository.RoleRepository
+	userService *services.UserService
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(userRepo *repository.UserRepository, roleRepo *repository.RoleRepository) *UserHandler {
+func NewUserHandler(userService *services.UserService) *UserHandler {
 	return &UserHandler{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
+		userService: userService,
 	}
 }
 
-// CreateUser handles POST /users
-func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+// getUserContext extracts UserContext from gin.Context
+func (h *UserHandler) getUserContext(c *gin.Context) *models.UserContext {
+	userContext, exists := c.Get("userContext")
+	if !exists {
+		return nil
 	}
-
-	var req models.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Validate role exists
-	roleID, err := uuid.Parse(req.RoleID)
-	if err != nil {
-		http.Error(w, "Invalid role ID", http.StatusBadRequest)
-		return
-	}
-
-	_, err = h.roleRepo.GetByID(roleID)
-	if err != nil {
-		http.Error(w, "Role not found", http.StatusBadRequest)
-		return
-	}
-
-	// Create user model
-	user := &models.User{
-		ID:       uuid.New(),
-		Name:     req.Name,
-		Email:    req.Email,
-		Password: req.Password, // TODO: Hash password
-		RoleID:   roleID,
-		Active:   true,
-	}
-
-	if req.Phone != "" {
-		user.Phone = &req.Phone
-	}
-	if req.CPF != "" {
-		user.CPF = &req.CPF
-	}
-
-	// Save to database
-	if err := h.userRepo.Create(user); err != nil {
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
-		return
-	}
-
-	// Return created user (without password)
-	user.Password = ""
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	return userContext.(*models.UserContext)
 }
 
-// GetUser handles GET /users/{id}
-func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Extract ID from URL path
-	idStr := r.URL.Path[len("/users/"):]
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
-		return
-	}
-
-	user, err := h.userRepo.GetByID(id)
-	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
-			http.Error(w, "User not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Failed to get user", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Don't return password
-	user.Password = ""
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
-}
-
-// ListUsers handles GET /users
-func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// GetUsers handles GET /users with multi-tenant support
+func (h *UserHandler) GetUsers(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
 	// Parse query parameters
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-	activeStr := r.URL.Query().Get("active")
-	roleIDStr := r.URL.Query().Get("role_id")
-
-	// Set defaults
+	page := 1
 	limit := 10
-	offset := 0
 
-	if limitStr != "" {
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if limitStr := c.Query("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
 			limit = l
 		}
 	}
 
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
 	var active *bool
-	if activeStr != "" {
+	if activeStr := c.Query("active"); activeStr != "" {
 		if a, err := strconv.ParseBool(activeStr); err == nil {
 			active = &a
 		}
 	}
 
-	var roleID *uuid.UUID
-	if roleIDStr != "" {
-		if rid, err := uuid.Parse(roleIDStr); err == nil {
-			roleID = &rid
-		}
+	req := services.UserListRequest{
+		Page:   page,
+		Limit:  limit,
+		Active: active,
 	}
 
-	users, err := h.userRepo.List(limit, offset, active, roleID)
+	response, err := h.userService.GetUsers(c.Request.Context(), userContext, req)
 	if err != nil {
-		http.Error(w, "Failed to list users", http.StatusInternalServerError)
+		if err == services.ErrInsufficientPermissions {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Remove passwords from response
-	for _, user := range users {
-		user.Password = ""
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"users": users,
-		"pagination": map[string]interface{}{
-			"limit":  limit,
-			"offset": offset,
-			"count":  len(users),
-		},
-	})
+	c.JSON(http.StatusOK, response)
 }
 
-// UpdateUser handles PUT /users/{id}
-func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// GetUserByID handles GET /users/:id
+func (h *UserHandler) GetUserByID(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Extract ID from URL path
-	idStr := r.URL.Path[len("/users/"):]
-	id, err := uuid.Parse(idStr)
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	user, err := h.userService.GetUserByID(c.Request.Context(), userContext, userID)
+	if err != nil {
+		if err == services.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		if err == services.ErrInsufficientPermissions {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// CreateUser handles POST /users
+func (h *UserHandler) CreateUser(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req models.CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.userService.CreateUser(c.Request.Context(), userContext, req)
+	if err != nil {
+		switch err {
+		case services.ErrInsufficientPermissions:
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+		case services.ErrEmailAlreadyExists:
+			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+		case services.ErrInvalidRole:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role"})
+		case services.ErrInvalidCompany:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid company"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+}
+
+// UpdateUser handles PUT /users/:id
+func (h *UserHandler) UpdateUser(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
 	var req models.UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updatedUser, err := h.userRepo.Update(id, req)
+	user, err := h.userService.UpdateUser(c.Request.Context(), userContext, userID, req)
 	if err != nil {
-		http.Error(w, "Failed to update user", http.StatusInternalServerError)
+		switch err {
+		case services.ErrUserNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		case services.ErrInsufficientPermissions:
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+		case services.ErrEmailAlreadyExists:
+			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+		case services.ErrCannotModifyOwnRole:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot modify own role"})
+		case services.ErrInvalidRole:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updatedUser)
+	c.JSON(http.StatusOK, user)
 }
 
-// DeleteUser handles DELETE /users/{id}
-func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// DeleteUser handles DELETE /users/:id
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Extract ID from URL path
-	idStr := r.URL.Path[len("/users/"):]
-	id, err := uuid.Parse(idStr)
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
-	if err := h.userRepo.Delete(id); err != nil {
-		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+	err = h.userService.DeleteUser(c.Request.Context(), userContext, userID)
+	if err != nil {
+		switch err {
+		case services.ErrUserNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		case services.ErrInsufficientPermissions:
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+		case services.ErrCannotDeleteSelf:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete yourself"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	c.JSON(http.StatusNoContent, nil)
 }
