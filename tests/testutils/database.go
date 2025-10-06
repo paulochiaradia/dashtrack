@@ -1,4 +1,4 @@
-package testconfig
+package testutils
 
 import (
 	"database/sql"

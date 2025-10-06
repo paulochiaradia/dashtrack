@@ -1,4 +1,4 @@
-package tests
+package e2e_test
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func (suite *APITestSuite) SetupTest() {
 	}
 
 	// Initialize router
-	suite.router = routes.NewRouter(db, cfg).GetEngine()
+	suite.router = routes.NewRouter(db, cfg).Engine()
 
 	// Create JWT manager for testing
 	accessExpiry := time.Duration(cfg.JWTAccessExpireMinutes) * time.Minute
