@@ -9,12 +9,12 @@ func (r *Router) setupManagerRoutes() {
 	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
 
 	// Manager routes (manager and admin)
-	manager := r.engine.Group("/manager")
+	manager := r.engine.Group("/api/v1/manager")
 	manager.Use(authMiddleware.RequireAuth())
 	manager.Use(authMiddleware.RequireAnyRole("manager", "admin"))
 
-	// User management (limited to same store)
-	manager.GET("/users", r.authHandler.GetStoreUsersGin) // TODO: implement
+	// User management (limited to same store/company)
+	manager.GET("/users", r.userHandler.GetUsers)
 
 	// Team management (TODO: implement handlers)
 	// manager.GET("/teams", r.teamHandler.GetTeamsGin)

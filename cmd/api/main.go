@@ -26,9 +26,9 @@ func main() {
 	if cfg.ServerEnv != "test" { // Don't init tracing in test environment
 		err = tracing.InitTracing(cfg.AppName, "http://jaeger:14268/api/traces")
 		if err != nil {
-			logger.Warn("Failed to initialize tracing", zap.Error(err))
+			logger.Warn("Tracing disabled - Jaeger not available", zap.Error(err))
 		} else {
-			logger.Info("Tracing initialized", zap.String("service", cfg.AppName))
+			logger.Info("Tracing initialized successfully")
 		}
 	}
 
@@ -55,26 +55,33 @@ func main() {
 
 	logger.Info("Available endpoints documented",
 		zap.Strings("public_endpoints", []string{
-			"GET /health", "GET /metrics", "POST /auth/login",
-			"POST /auth/refresh", "POST /auth/logout",
-			"POST /auth/forgot-password", "POST /auth/reset-password",
+			"GET /health", "GET /metrics", "POST /api/v1/auth/login",
+			"POST /api/v1/auth/refresh", "POST /api/v1/auth/logout",
+			"POST /api/v1/auth/forgot-password", "POST /api/v1/auth/reset-password",
 		}),
 		zap.Strings("authenticated_endpoints", []string{
-			"GET /profile", "POST /profile/change-password", "GET /roles",
+			"GET /api/v1/profile", "POST /api/v1/profile/change-password", "GET /api/v1/roles",
 		}),
-		zap.Strings("manager_endpoints", []string{
-			"GET /manager/users",
+		zap.Strings("master_endpoints", []string{
+			"POST /api/v1/master/companies", "GET /api/v1/master/companies", "DELETE /api/v1/master/companies/:id",
+			"GET /api/v1/master/dashboard", "GET /api/v1/master/users", "POST /api/v1/master/users",
 		}),
 		zap.Strings("admin_endpoints", []string{
-			"GET /admin/users", "POST /admin/users", "GET /admin/users/:id",
-			"PUT /admin/users/:id", "DELETE /admin/users/:id",
+			"GET /api/v1/admin/users", "POST /api/v1/admin/users", "GET /api/v1/admin/users/:id",
+			"PUT /api/v1/admin/users/:id", "DELETE /api/v1/admin/users/:id",
+		}),
+		zap.Strings("system_endpoints", []string{
+			"GET /api/v1/system/users", "GET /api/v1/system/roles", "GET /api/v1/audit/logs",
+		}),
+		zap.Strings("manager_endpoints", []string{
+			"GET /api/v1/manager/users",
 		}),
 	)
 
 	// Start server
 	server := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
-		Handler: router.GetEngine(),
+		Handler: router.Engine(),
 	}
 
 	logger.Info("HTTP server starting", zap.String("address", server.Addr))

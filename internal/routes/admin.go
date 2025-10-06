@@ -8,21 +8,32 @@ func (r *Router) setupAdminRoutes() {
 	// Create Gin middleware from auth middleware
 	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
 
-	// Admin routes (admin only)
-	admin := r.engine.Group("/admin")
+	// Admin routes (technical/operational administration)
+	// Admin = System Administrator (technical operations)
+	admin := r.engine.Group("/api/v1/admin")
 	admin.Use(authMiddleware.RequireAuth())
-	admin.Use(authMiddleware.RequireRole("admin"))
+	admin.Use(authMiddleware.RequireAdminRole()) // ONLY admin role (not master)
 
-	// User management
-	admin.GET("/users", r.authHandler.GetUsersGin)
-	admin.POST("/users", r.authHandler.CreateUserGin)
-	admin.GET("/users/:id", r.authHandler.GetUserByIDGin)
-	admin.PUT("/users/:id", r.authHandler.UpdateUserGin)
-	admin.DELETE("/users/:id", r.authHandler.DeleteUserGin)
+	// Technical User Management (admin-only)
+	admin.GET("/users", r.userHandler.GetUsers)
+	admin.POST("/users", r.userHandler.CreateUser)
+	admin.GET("/users/:id", r.userHandler.GetUserByID)
+	admin.PUT("/users/:id", r.userHandler.UpdateUser)
+	admin.DELETE("/users/:id", r.userHandler.DeleteUser)
 
-	// Store management (TODO: implement handlers)
-	// admin.GET("/stores", r.storeHandler.GetStoresGin)
-	// admin.POST("/stores", r.storeHandler.CreateStoreGin)
-	// admin.PUT("/stores/:id", r.storeHandler.UpdateStoreGin)
-	// admin.DELETE("/stores/:id", r.storeHandler.DeleteStoreGin)
+	// System Configuration (admin-only)
+	// TODO: implement system config handlers
+	// admin.GET("/system/config", r.systemHandler.GetSystemConfig)
+	// admin.PUT("/system/config", r.systemHandler.UpdateSystemConfig)
+
+	// Technical Monitoring (admin-only)
+	// TODO: implement monitoring handlers
+	// admin.GET("/system/health", r.systemHandler.GetHealthStatus)
+	// admin.GET("/system/metrics", r.systemHandler.GetSystemMetrics)
+	// admin.GET("/system/logs", r.systemHandler.GetSystemLogs)
+
+	// Security Management (admin-only)
+	// TODO: implement security config handlers
+	// admin.GET("/security/config", r.securityHandler.GetSecurityConfig)
+	// admin.PUT("/security/config", r.securityHandler.UpdateSecurityConfig)
 }
