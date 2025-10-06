@@ -1,0 +1,110 @@
+groups:
+  - name: dashtrack_api_alerts
+    rules:
+      # Alta taxa de erro
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: dashtrack-api
+        annotations:
+          summary: "Alta taxa de erro na API DashTrack"
+          description: "A taxa de erro HTTP 5xx está acima de 5% nos últimos 5 minutos. Taxa atual: {{ $value }}"
+
+      # Latência alta
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: dashtrack-api
+        annotations:
+          summary: "Alta latência na API DashTrack"
+          description: "P95 da latência HTTP está acima de 500ms nos últimos 5 minutos. Valor atual: {{ $value }}s"
+
+      # Falhas de autenticação
+      - alert: HighAuthFailures
+        expr: rate(auth_failures_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: dashtrack-api
+        annotations:
+          summary: "Alta taxa de falhas de autenticação"
+          description: "Mais de 1 falha de autenticação por segundo nos últimos 5 minutos. Possível ataque de força bruta."
+
+      # Muitas conexões no banco
+      - alert: HighDatabaseConnections
+        expr: db_connections_active > 15
+        for: 1m
+        labels:
+          severity: warning
+          service: dashtrack-api
+        annotations:
+          summary: "Muitas conexões ativas no banco de dados"
+          description: "Número de conexões ativas no banco está acima de 15. Valor atual: {{ $value }}"
+
+      # API indisponível
+      - alert: APIDown
+        expr: up{job="dashtrack-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: dashtrack-api
+        annotations:
+          summary: "API DashTrack está indisponível"
+          description: "A API DashTrack não está respondendo há mais de 1 minuto."
+
+      # Alto uso de memória
+      - alert: HighMemoryUsage
+        expr: go_memstats_alloc_bytes > 500000000  # 500MB
+        for: 5m
+        labels:
+          severity: warning
+          service: dashtrack-api
+        annotations:
+          summary: "Alto uso de memória"
+          description: "Uso de memória está acima de 500MB. Valor atual: {{ $value }} bytes"
+
+      # Muitas goroutines
+      - alert: HighGoroutines
+        expr: go_goroutines > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: dashtrack-api
+        annotations:
+          summary: "Muitas goroutines ativas"
+          description: "Número de goroutines está acima de 1000. Valor atual: {{ $value }}"
+
+  - name: dashtrack_business_alerts
+    rules:
+      # Poucas sessões ativas (negócio)
+      - alert: LowUserActivity
+        expr: active_users_total < 1
+        for: 30m
+        labels:
+          severity: info
+          service: dashtrack-api
+        annotations:
+          summary: "Baixa atividade de usuários"
+          description: "Menos de 1 usuário ativo nos últimos 30 minutos. Possível problema de adoção."
+
+      # Pico de novos usuários
+      - alert: HighUserRegistration
+        expr: increase(user_sessions_total[1h]) > 100
+        for: 5m
+        labels:
+          severity: info
+          service: dashtrack-api
+        annotations:
+          summary: "Pico de novas sessões"
+          description: "Mais de 100 novas sessões na última hora. Possível viral ou evento."

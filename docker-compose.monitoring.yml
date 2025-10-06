@@ -1,33 +1,10 @@
 version: '3.8'
 
+networks:
+  dashtrack_dashtrack_network:
+    external: true
+
 services:
-  # Application and Database (from main docker-compose.yml)
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: dev
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
-      - prometheus
-    environment:
-      - DB_SOURCE=postgresql://user:password@db:5432/dashtrack?sslmode=disable
-      - PROMETHEUS_ENABLED=true
-      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
-
-  db:
-    image: postgres:13-alpine
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=dashtrack
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
   # Monitoring Stack
   prometheus:
     image: prom/prometheus:latest
@@ -36,6 +13,7 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerts:/etc/prometheus/alerts
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -43,8 +21,9 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
     networks:
-      - dashtrack_network
+      - dashtrack_dashtrack_network
 
   grafana:
     image: grafana/grafana:latest
@@ -58,50 +37,40 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     networks:
-      - dashtrack_network
+      - dashtrack_dashtrack_network
     depends_on:
       - prometheus
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: dashtrack-jaeger
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "14268:14268"  # jaeger.thrift
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    networks:
-      - dashtrack_network
-
   # Log aggregation
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:2.9.0
     container_name: dashtrack-loki
     ports:
       - "3100:3100"
     volumes:
-      - ./monitoring/loki.yml:/etc/loki/local-config.yaml
+      - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command:
+      - -config.file=/etc/loki/local-config.yaml
     networks:
-      - dashtrack_network
-    command: -config.file=/etc/loki/local-config.yaml
+      - dashtrack_dashtrack_network
+    restart: unless-stopped
 
   promtail:
     image: grafana/promtail:latest
     container_name: dashtrack-promtail
     volumes:
-      - /var/log:/var/log:ro
-      - ./monitoring/promtail.yml:/etc/promtail/config.yml
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_data:/tmp
+    command:
+      - -config.file=/etc/promtail/config.yml
     networks:
-      - dashtrack_network
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
+      - dashtrack_dashtrack_network
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
   prometheus_data:
   grafana_data:
-
-networks:
-  dashtrack_network:
-    driver: bridge
+  loki_data:
+  promtail_data:

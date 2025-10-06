@@ -21,6 +21,8 @@ services:
       - APP_NAME=Dashtrack API
       - APP_VERSION=1.0.0
       - BCRYPT_COST=12
+    networks:
+      - dashtrack_dashtrack_network
 
   db:
     image: postgres:13-alpine
@@ -28,10 +30,25 @@ services:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=dashtrack
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dashtrack_dashtrack_network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: dashtrack-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # jaeger.thrift
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - dashtrack_dashtrack_network
 
 volumes:
   postgres_data:
+
+networks:
+  dashtrack_dashtrack_network:
+    driver: bridge
