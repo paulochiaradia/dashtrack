@@ -78,6 +78,7 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
+	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.8.0 // indirect
