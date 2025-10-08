@@ -35,6 +35,7 @@ func (r *Router) setupMultiTenantRoutes() {
 		master.GET("/users/:id", r.userHandler.GetUserByID)
 		master.PUT("/users/:id", r.userHandler.UpdateUser)
 		master.DELETE("/users/:id", r.userHandler.DeleteUser)
+		master.PATCH("/users/:id/transfer", r.userHandler.TransferUserToCompany)
 
 		// Billing & Business Operations (master only)
 		// TODO: implement billing handlers

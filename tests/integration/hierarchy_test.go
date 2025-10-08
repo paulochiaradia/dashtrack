@@ -142,6 +142,22 @@ func (suite *HierarchyTestSuite) setupRoutes() {
 		master.GET("/companies/:id", suite.mockGetCompany)
 		master.PUT("/companies/:id", suite.mockUpdateCompany)
 		master.DELETE("/companies/:id", suite.mockDeleteCompany)
+
+		// Master user management
+		master.GET("/users", suite.mockGetAllUsers)
+		master.POST("/users", suite.mockCreateUser)
+		master.GET("/users/:id", suite.mockGetUserByID)
+		master.PUT("/users/:id", suite.mockUpdateUser)
+		master.DELETE("/users/:id", suite.mockDeleteUser)
+	}
+
+	// User routes (protected, for all authenticated users)
+	userRoutes := api.Group("/users")
+	{
+		userRoutes.GET("", suite.mockGetAllUsers)
+		userRoutes.GET("/:id", suite.mockGetUserByID)
+		userRoutes.PUT("/:id", suite.mockUpdateUser)
+		userRoutes.DELETE("/:id", suite.mockDeleteUser)
 	}
 
 	// Company routes
@@ -512,6 +528,186 @@ func (suite *HierarchyTestSuite) mockCreateUser(c *gin.Context) {
 		"id":   uuid.New(),
 		"name": "New User",
 	})
+}
+
+func (suite *HierarchyTestSuite) mockGetUserByID(c *gin.Context) {
+	userID := c.Param("id")
+
+	// Mock user data based on ID
+	if userID == suite.driver.ID.String() {
+		c.JSON(200, gin.H{
+			"id":    suite.driver.ID,
+			"name":  suite.driver.Name,
+			"email": suite.driver.Email,
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"id":    userID,
+		"name":  "Test User",
+		"email": "test@example.com",
+	})
+}
+
+func (suite *HierarchyTestSuite) mockUpdateUser(c *gin.Context) {
+	userID := c.Param("id")
+	userContext, exists := c.Get("userContext")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	uc := userContext.(*models.UserContext)
+
+	// Parse the UUID
+	targetUserID, err := uuid.Parse(userID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Mock permission check
+	canModify := suite.mockCanModifyUser(uc, targetUserID)
+	if !canModify {
+		c.JSON(403, gin.H{"error": "Insufficient permissions"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"id":      targetUserID,
+		"name":    "Updated User",
+		"email":   "updated@example.com",
+		"message": "User updated successfully",
+	})
+}
+
+func (suite *HierarchyTestSuite) mockDeleteUser(c *gin.Context) {
+	userID := c.Param("id")
+	c.JSON(200, gin.H{
+		"message": "User deleted successfully",
+		"id":      userID,
+	})
+}
+
+// Mock permission check function
+func (suite *HierarchyTestSuite) mockCanModifyUser(requesterContext *models.UserContext, targetUserID uuid.UUID) bool {
+	// Find target user
+	var targetUser *models.User
+	switch targetUserID {
+	case suite.driver.ID:
+		targetUser = suite.driver
+	case suite.helper.ID:
+		targetUser = suite.helper
+	case suite.companyAdmin.ID:
+		targetUser = suite.companyAdmin
+	case suite.masterUser.ID:
+		targetUser = suite.masterUser
+	default:
+		return false
+	}
+
+	// Apply the same logic as our service
+	switch requesterContext.Role {
+	case "master":
+		return true
+	case "admin":
+		if targetUser.Role == nil {
+			return false
+		}
+		return targetUser.Role.Name != "master" && targetUser.Role.Name != "admin"
+	case "company_admin":
+		if requesterContext.CompanyID == nil || targetUser.CompanyID == nil {
+			return false
+		}
+		if *requesterContext.CompanyID != *targetUser.CompanyID {
+			return false
+		}
+		return targetUser.Role != nil && (targetUser.Role.Name == "driver" || targetUser.Role.Name == "helper")
+	case "driver", "helper":
+		return false
+	default:
+		return false
+	}
+}
+
+// Test new permission hierarchy rules
+func (suite *HierarchyTestSuite) TestDriverCannotModifyOwnData() {
+	// Test: Driver cannot modify their own data
+	updateData := map[string]interface{}{
+		"name":  "New Driver Name",
+		"email": "newdriver@test.com",
+	}
+	jsonData, _ := json.Marshal(updateData)
+
+	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
+	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Contains(suite.T(), response["error"], "Insufficient permissions")
+}
+
+func (suite *HierarchyTestSuite) TestHelperCannotModifyOwnData() {
+	// Test: Helper cannot modify their own data
+	updateData := map[string]interface{}{
+		"name":  "New Helper Name",
+		"email": "newhelper@test.com",
+	}
+	jsonData, _ := json.Marshal(updateData)
+
+	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.helper.ID.String(), bytes.NewBuffer(jsonData))
+	req.Header.Set("Authorization", "Bearer "+suite.helperToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Contains(suite.T(), response["error"], "Insufficient permissions")
+}
+
+func (suite *HierarchyTestSuite) TestCompanyAdminCanModifyDriverInSameCompany() {
+	// Test: Company Admin can modify drivers in same company
+	updateData := map[string]interface{}{
+		"name": "Updated Driver Name",
+	}
+	jsonData, _ := json.Marshal(updateData)
+
+	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
+	req.Header.Set("Authorization", "Bearer "+suite.companyAdminToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	assert.Equal(suite.T(), http.StatusOK, w.Code)
+}
+
+func (suite *HierarchyTestSuite) TestMasterCanModifyAnyUser() {
+	// Test: Master can modify any user
+	updateData := map[string]interface{}{
+		"name": "Master Updated Name",
+	}
+	jsonData, _ := json.Marshal(updateData)
+
+	req := httptest.NewRequest("PUT", "/api/v1/master/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
+	req.Header.Set("Authorization", "Bearer "+suite.masterToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	suite.router.ServeHTTP(w, req)
+
+	assert.Equal(suite.T(), http.StatusOK, w.Code)
 }
 
 // Run the test suite

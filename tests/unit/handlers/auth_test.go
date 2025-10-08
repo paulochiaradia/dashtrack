@@ -143,6 +143,11 @@ func (m *MockUserRepository) ListByRoles(ctx context.Context, roles []string, li
 	return args.Get(0).([]*models.User), args.Error(1)
 }
 
+func (m *MockUserRepository) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
+	args := m.Called(ctx, userID, companyID)
+	return args.Error(0)
+}
+
 type MockAuthLogRepository struct {
 	mock.Mock
 }

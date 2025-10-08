@@ -99,6 +99,12 @@ type UpdateUserRequest struct {
 	RoleID          string `json:"role_id,omitempty" binding:"omitempty,uuid"`
 }
 
+// TransferUserRequest represents the request to transfer a user to another company (Master only)
+type TransferUserRequest struct {
+	CompanyID string `json:"company_id" binding:"required,uuid"`
+	Reason    string `json:"reason,omitempty" binding:"omitempty,max=255"`
+}
+
 // LoginRequest represents a login request
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`

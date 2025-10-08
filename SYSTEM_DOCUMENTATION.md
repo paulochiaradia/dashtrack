@@ -135,8 +135,19 @@ Cada empresa é uma entidade isolada com seus próprios:
 ✅ Visualização de veículos atribuídos
 ✅ Atualização de status
 ✅ Histórico limitado
-✅ Perfil pessoal
+❌ Edição de dados pessoais (apenas gerência pode alterar)
+❌ Alteração de configurações
 ```
+
+### Regras de Modificação de Dados
+```
+🎯 MASTER: Pode alterar dados de TODOS os usuários
+🎯 ADMIN: Pode alterar dados de todos EXCETO master/admin
+🎯 COMPANY_ADMIN: Pode alterar APENAS drivers/helpers da sua empresa
+🎯 DRIVER/HELPER: NÃO podem alterar seus próprios dados
+```
+
+**Importante**: Motoristas e ajudantes, uma vez cadastrados, não podem modificar seus dados. Esta é uma função exclusiva da gerência para manter a integridade e controle dos dados.
 
 ---
 
@@ -216,6 +227,7 @@ DELETE /api/v1/master/companies/:id    # Deletar empresa
 GET    /api/v1/master/dashboard        # Dashboard master
 GET    /api/v1/master/users            # Todos os usuários
 POST   /api/v1/master/users            # Criar usuário
+PATCH  /api/v1/master/users/:id/transfer  # Transferir usuário entre empresas
 ```
 
 ### Admin/Company Admin
@@ -498,6 +510,28 @@ Authorization: Bearer {{expired_token}}
 }
 ```
 
+### 13. Transferir Usuário Entre Empresas (Master Only)
+```http
+PATCH {{base_url}}/api/v1/master/users/{{user_id}}/transfer
+Authorization: Bearer {{master_token}}
+Content-Type: application/json
+
+{
+  "company_id": "{{new_company_id}}",
+  "reason": "Transferência por reorganização da empresa"
+}
+```
+
+**Resposta Esperada (200)**:
+```json
+{
+  "message": "User transferred successfully",
+  "user_id": "uuid",
+  "company_id": "uuid", 
+  "reason": "Transferência por reorganização da empresa"
+}
+```
+
 ---
 
 ## 🔍 Casos de Teste Específicos
@@ -594,11 +628,76 @@ Crie uma collection no Postman com os seguintes folders:
    - Insufficient Permissions
    - Rate Limiting
 
-7. **07 - Error Cases**
+7. **07 - Permission Hierarchy Tests**
+   - Driver/Helper cannot modify own data
+   - Company Admin restricted to company users
+   - Admin cannot modify Master/Admin users
+   - Master can modify any user
+
+8. **08 - Error Cases**
    - Invalid Email Format
    - Wrong Password
    - Missing Fields
    - Invalid JSON
+
+---
+
+## 🔐 Testes de Hierarquia de Permissões
+
+### Teste: Driver tentando modificar próprios dados
+```http
+PUT {{base_url}}/api/v1/users/{{driver_user_id}}
+Authorization: Bearer {{driver_token}}
+Content-Type: application/json
+
+{
+  "name": "Novo Nome",
+  "email": "novoemail@teste.com"
+}
+```
+
+**Resposta Esperada (403)**:
+```json
+{
+  "error": "Insufficient permissions"
+}
+```
+
+### Teste: Company Admin modificando usuário de outra empresa
+```http
+PUT {{base_url}}/api/v1/users/{{user_from_other_company}}
+Authorization: Bearer {{company_admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Tentativa de Alteração"
+}
+```
+
+**Resposta Esperada (403)**:
+```json
+{
+  "error": "Insufficient permissions"
+}
+```
+
+### Teste: Admin tentando modificar Master
+```http
+PUT {{base_url}}/api/v1/admin/users/{{master_user_id}}
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Tentativa Inválida"
+}
+```
+
+**Resposta Esperada (403)**:
+```json
+{
+  "error": "Insufficient permissions"
+}
+```
 
 ---
 

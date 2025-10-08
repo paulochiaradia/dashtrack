@@ -24,6 +24,7 @@ type UserRepositoryInterface interface {
 	GetByCompany(ctx context.Context, companyID uuid.UUID, limit, offset int) ([]*models.User, error)
 	Update(ctx context.Context, id uuid.UUID, updateReq models.UpdateUserRequest) (*models.User, error)
 	UpdatePassword(ctx context.Context, id uuid.UUID, hashedPassword string) error
+	UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, limit, offset int, active *bool, roleID *uuid.UUID) ([]*models.User, error)
 	ListByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string, limit, offset int) ([]*models.User, error)
@@ -356,6 +357,38 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hashe
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateCompany updates a user's company (Master only operation)
+func (r *UserRepository) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
+	ctx, span := r.tracer.Start(ctx, "UserRepository.UpdateCompany",
+		trace.WithAttributes(
+			attribute.String("user.id", userID.String()),
+			attribute.String("company.id", companyID.String()),
+		))
+	defer span.End()
+
+	query := `
+		UPDATE users 
+		SET company_id = $1, updated_at = $2 
+		WHERE id = $3`
+
+	result, err := r.db.ExecContext(ctx, query, companyID, time.Now(), userID)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to update user company: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
 	}
 
 	return nil

@@ -229,3 +229,58 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	c.JSON(http.StatusNoContent, nil)
 }
+
+// TransferUserToCompany handles PATCH /master/users/:id/transfer - Master only
+func (h *UserHandler) TransferUserToCompany(c *gin.Context) {
+	userContext := h.getUserContext(c)
+	if userContext == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Only master can transfer users between companies
+	if userContext.Role != "master" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only master users can transfer users between companies"})
+		return
+	}
+
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	var req models.TransferUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	companyID, err := uuid.Parse(req.CompanyID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid company ID"})
+		return
+	}
+
+	// Perform the transfer
+	err = h.userService.TransferUserToCompany(c.Request.Context(), userID, companyID, req.Reason)
+	if err != nil {
+		switch err {
+		case services.ErrUserNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		case services.ErrCompanyNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "User transferred successfully",
+		"user_id":    userID,
+		"company_id": companyID,
+		"reason":     req.Reason,
+	})
+}

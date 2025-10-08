@@ -242,6 +242,20 @@ func (mr *MockUserRepositoryMockRecorder) UpdateLastLogin(ctx, id interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLogin", reflect.TypeOf((*MockUserRepository)(nil).UpdateLastLogin), ctx, id)
 }
 
+// UpdateCompany mocks base method.
+func (m *MockUserRepository) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCompany", ctx, userID, companyID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateCompany indicates an expected call of UpdateCompany.
+func (mr *MockUserRepositoryMockRecorder) UpdateCompany(ctx, userID, companyID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCompany", reflect.TypeOf((*MockUserRepository)(nil).UpdateCompany), ctx, userID, companyID)
+}
+
 // UpdatePassword mocks base method.
 func (m *MockUserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hashedPassword string) error {
 	m.ctrl.T.Helper()

@@ -21,6 +21,7 @@ var (
 	ErrEmailAlreadyExists      = errors.New("email already exists")
 	ErrInvalidRole             = errors.New("invalid role")
 	ErrInvalidCompany          = errors.New("invalid company")
+	ErrCompanyNotFound         = errors.New("company not found")
 	ErrCannotDeleteSelf        = errors.New("cannot delete yourself")
 	ErrRoleRequiresCompany     = errors.New("role requires company assignment")
 	ErrRoleProhibitsCompany    = errors.New("role prohibits company assignment")
@@ -161,7 +162,7 @@ func (s *UserService) CreateUser(ctx context.Context, requesterContext *models.U
 
 	// Validate role creation permissions
 	if !s.canCreateUserWithRole(requesterContext, role.Name) {
-		return nil, ErrInsufficientPermissions
+		return nil, fmt.Errorf("cannot create user with role %s", role.Name)
 	}
 
 	// Check if email already exists
@@ -350,8 +351,8 @@ func (s *UserService) canCreateUserWithRole(requesterContext *models.UserContext
 	case "master":
 		return true // Can create any role
 	case "company_admin":
-		// Can create company_admin, manager, driver, helper in their company
-		allowedRoles := []string{"company_admin", "manager", "driver", "helper"}
+		// Can create driver, helper in their company
+		allowedRoles := []string{"driver", "helper"}
 		for _, allowed := range allowedRoles {
 			if roleName == allowed {
 				return true
@@ -359,8 +360,14 @@ func (s *UserService) canCreateUserWithRole(requesterContext *models.UserContext
 		}
 		return false
 	case "admin":
-		// Global admin can create any role except master
-		return roleName != "master"
+		// Global admin can create driver, helper but not master, admin, or company_admin
+		allowedRoles := []string{"driver", "helper"}
+		for _, allowed := range allowedRoles {
+			if roleName == allowed {
+				return true
+			}
+		}
+		return false
 	default:
 		return false
 	}
@@ -369,16 +376,27 @@ func (s *UserService) canCreateUserWithRole(requesterContext *models.UserContext
 func (s *UserService) canModifyUser(requesterContext *models.UserContext, targetUser *models.User) bool {
 	switch requesterContext.Role {
 	case "master":
+		// Master pode alterar dados de TODOS os usuários
 		return true
-	case "company_admin":
-		return requesterContext.CompanyID != nil &&
-			targetUser.CompanyID != nil &&
-			*requesterContext.CompanyID == *targetUser.CompanyID
 	case "admin":
-		// Global admin can modify any user except master
-		return targetUser.Role != nil && targetUser.Role.Name != "master"
+		// Admin pode alterar dados de todos, EXCETO master e outros admins
+		if targetUser.Role == nil {
+			return false
+		}
+		return targetUser.Role.Name != "master" && targetUser.Role.Name != "admin"
+	case "company_admin":
+		// Company Admin pode alterar dados APENAS de drivers/helpers da SUA empresa
+		if requesterContext.CompanyID == nil || targetUser.CompanyID == nil {
+			return false
+		}
+		if *requesterContext.CompanyID != *targetUser.CompanyID {
+			return false
+		}
+		// Só pode modificar drivers e helpers
+		return targetUser.Role != nil && (targetUser.Role.Name == "driver" || targetUser.Role.Name == "helper")
 	case "driver", "helper":
-		return requesterContext.UserID == targetUser.ID
+		// Drivers e helpers NÃO podem alterar seus próprios dados
+		return false
 	default:
 		return false
 	}
@@ -424,4 +442,28 @@ func (s *UserService) canAssignToCompany(requesterContext *models.UserContext, c
 	default:
 		return false
 	}
+}
+
+// TransferUserToCompany transfers a user to another company (Master only)
+func (s *UserService) TransferUserToCompany(ctx context.Context, userID, companyID uuid.UUID, reason string) error {
+	// Check if user exists
+	_, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	// Update user's company
+	err = s.userRepo.UpdateCompany(ctx, userID, companyID)
+	if err != nil {
+		// If foreign key constraint fails, it means company doesn't exist
+		if err.Error() == "company not found" {
+			return ErrCompanyNotFound
+		}
+		return fmt.Errorf("failed to transfer user: %w", err)
+	}
+
+	// Log the transfer (you might want to add this to audit logs)
+	// TODO: Add audit log entry for user transfer
+
+	return nil
 }

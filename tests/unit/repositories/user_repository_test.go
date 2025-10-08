@@ -371,8 +371,8 @@ func (suite *UserRepositoryTestSuite) TestDelete_Success() {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	// Mock the UPDATE query (soft delete)
-	expectedQuery := `UPDATE users SET active = false, updated_at = \$1 WHERE id = \$2`
+	// Mock the UPDATE query (soft delete with deleted_at)
+	expectedQuery := `UPDATE users SET deleted_at = \$1, updated_at = \$1 WHERE id = \$2`
 	suite.mock.ExpectExec(expectedQuery).
 		WithArgs(sqlmock.AnyArg(), userID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
