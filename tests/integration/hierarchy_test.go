@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"bytes"
@@ -107,6 +107,7 @@ func (suite *HierarchyTestSuite) setupRoutes() {
 			Name:     user.Name,
 			RoleID:   user.RoleID,
 			RoleName: role,
+			TenantID: user.CompanyID,
 		}
 
 		accessToken, refreshToken, err := suite.jwtManager.GenerateTokens(userContext)
@@ -245,6 +246,7 @@ func (suite *HierarchyTestSuite) createTestData() {
 		Name:     suite.companyAdmin.Name,
 		RoleID:   suite.companyAdmin.RoleID,
 		RoleName: suite.companyAdmin.Role.Name,
+		TenantID: suite.companyAdmin.CompanyID,
 	}
 	adminTokens, _, _ := suite.jwtManager.GenerateTokens(adminUserContext)
 	suite.companyAdminToken = adminTokens
@@ -255,6 +257,7 @@ func (suite *HierarchyTestSuite) createTestData() {
 		Name:     suite.driver.Name,
 		RoleID:   suite.driver.RoleID,
 		RoleName: suite.driver.Role.Name,
+		TenantID: suite.driver.CompanyID,
 	}
 	driverTokens, _, _ := suite.jwtManager.GenerateTokens(driverUserContext)
 	suite.driverToken = driverTokens
@@ -265,6 +268,7 @@ func (suite *HierarchyTestSuite) createTestData() {
 		Name:     suite.helper.Name,
 		RoleID:   suite.helper.RoleID,
 		RoleName: suite.helper.Role.Name,
+		TenantID: suite.helper.CompanyID,
 	}
 	helperTokens, _, _ := suite.jwtManager.GenerateTokens(helperUserContext)
 	suite.helperToken = helperTokens
