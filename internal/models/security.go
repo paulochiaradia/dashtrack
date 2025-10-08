@@ -8,16 +8,16 @@ import (
 
 // RateLimitRule represents a rate limiting rule
 type RateLimitRule struct {
-	ID          uuid.UUID     `json:"id" db:"id"`
-	Name        string        `json:"name" db:"name"`
-	Path        string        `json:"path" db:"path"`     // API path pattern
-	Method      string        `json:"method" db:"method"` // HTTP method
-	MaxRequests int           `json:"max_requests" db:"max_requests"`
-	WindowSize  time.Duration `json:"window_size" db:"window_size"` // Time window
-	UserBased   bool          `json:"user_based" db:"user_based"`   // Per user or per IP
-	Active      bool          `json:"active" db:"active"`
-	CreatedAt   time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time     `json:"updated_at" db:"updated_at"`
+	ID          uuid.UUID `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Path        string    `json:"path" db:"path"`     // API path pattern
+	Method      string    `json:"method" db:"method"` // HTTP method
+	MaxRequests int       `json:"max_requests" db:"max_requests"`
+	WindowSize  string    `json:"window_size" db:"window_size"` // Time window as string (interval)
+	UserBased   bool      `json:"user_based" db:"user_based"`   // Per user or per IP
+	Active      bool      `json:"active" db:"active"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // RateLimitEvent represents a rate limit event

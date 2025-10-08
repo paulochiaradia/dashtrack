@@ -1,4 +1,5 @@
 -- +migrate Up
+-- +migrate Up
 -- Create two_factor_auth table
 CREATE TABLE IF NOT EXISTS two_factor_auth (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -87,10 +88,3 @@ INSERT INTO rate_limit_rules (name, path, method, max_requests, window_size, use
 ('Admin Actions Rate Limit', '/admin/*', 'ANY', 100, '1 hour', TRUE),
 ('IoT Data Rate Limit', '/iot/data', 'POST', 60, '1 minute', FALSE)
 ON CONFLICT DO NOTHING;
-
--- +migrate Down
-DROP TABLE IF EXISTS audit_logs;
-DROP TABLE IF EXISTS session_tokens;
-DROP TABLE IF EXISTS rate_limit_events;
-DROP TABLE IF EXISTS rate_limit_rules;
-DROP TABLE IF EXISTS two_factor_auth;

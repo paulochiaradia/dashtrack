@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,6 +49,24 @@ func NewRateLimiter(db *sqlx.DB) *RateLimiter {
 	return rl
 }
 
+// parseInterval converts PostgreSQL interval string to time.Duration
+func parseInterval(interval string) time.Duration {
+	// Handle common PostgreSQL interval formats
+	// Examples: "00:01:00", "01:00:00", "00:05:00"
+	if strings.Contains(interval, ":") {
+		parts := strings.Split(interval, ":")
+		if len(parts) == 3 {
+			hours, _ := strconv.Atoi(parts[0])
+			minutes, _ := strconv.Atoi(parts[1])
+			seconds, _ := strconv.Atoi(parts[2])
+			return time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second
+		}
+	}
+
+	// Default to 1 minute if parsing fails
+	return time.Minute
+}
+
 // RateLimitMiddleware creates a rate limiting middleware
 func (rl *RateLimiter) RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -83,13 +102,14 @@ func (rl *RateLimiter) RateLimitMiddleware() gin.HandlerFunc {
 			// Log rate limit event
 			rl.logRateLimitEvent(userID, clientIP, path, method, true, rule.ID, c.Request.UserAgent())
 
+			windowSize := parseInterval(rule.WindowSize)
 			c.Header("X-RateLimit-Limit", strconv.Itoa(rule.MaxRequests))
 			c.Header("X-RateLimit-Remaining", "0")
-			c.Header("Retry-After", strconv.Itoa(int(rule.WindowSize.Seconds())))
+			c.Header("Retry-After", strconv.Itoa(int(windowSize.Seconds())))
 
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Rate limit exceeded",
-				"retry_after": int(rule.WindowSize.Seconds()),
+				"retry_after": int(windowSize.Seconds()),
 			})
 			c.Abort()
 			return
@@ -108,13 +128,14 @@ func (rl *RateLimiter) checkRateLimit(key string, rule *models.RateLimitRule, cl
 	defer rl.mutex.Unlock()
 
 	now := time.Now()
+	windowSize := parseInterval(rule.WindowSize)
 
 	// Get or create cache entry
 	cache, exists := rl.cache[key]
 	if !exists {
 		cache = &RateLimitCache{
 			Count:     0,
-			ResetTime: now.Add(rule.WindowSize),
+			ResetTime: now.Add(windowSize),
 		}
 		rl.cache[key] = cache
 	}
@@ -122,7 +143,7 @@ func (rl *RateLimiter) checkRateLimit(key string, rule *models.RateLimitRule, cl
 	// Reset if window expired
 	if now.After(cache.ResetTime) {
 		cache.Count = 0
-		cache.ResetTime = now.Add(rule.WindowSize)
+		cache.ResetTime = now.Add(windowSize)
 		cache.Blocked = false
 	}
 

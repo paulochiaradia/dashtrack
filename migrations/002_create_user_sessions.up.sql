@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Create user_sessions table
 CREATE TABLE IF NOT EXISTS user_sessions (
     id VARCHAR(128) PRIMARY KEY,

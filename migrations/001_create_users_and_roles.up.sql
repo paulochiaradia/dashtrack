@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Create roles table
 CREATE TABLE IF NOT EXISTS roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

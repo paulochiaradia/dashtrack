@@ -111,11 +111,6 @@ func (r *Router) setupMiddleware() {
 }
 
 func (r *Router) setupRoutes() {
-	// Health check route
-	r.engine.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-
 	// API v1 routes
 	v1 := r.engine.Group("/api/v1")
 
@@ -166,7 +161,6 @@ func (r *Router) setupRoutes() {
 	r.setupCompanyAdminRoutes()
 	r.setupAdminRoutes()
 	r.setupManagerRoutes()
-	r.setupAuthRoutes()
 	r.setupHealthRoutes()
 	r.setupSecurityRoutes()
 	r.setupSessionRoutes()

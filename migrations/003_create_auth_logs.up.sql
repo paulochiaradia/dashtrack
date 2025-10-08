@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Create auth_logs table
 CREATE TABLE IF NOT EXISTS auth_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -26,7 +26,7 @@ func NewDatabase(dsn string) *sql.DB {
 
 func runMigrations(db *sql.DB) {
 	migrations := &migrate.FileMigrationSource{
-		Dir: "internal/database/migrations",
+		Dir: "migrations",
 	}
 
 	n, err := migrate.Exec(db, "postgres", migrations, migrate.Up)

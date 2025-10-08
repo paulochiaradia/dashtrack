@@ -38,7 +38,7 @@ func SetupTestDatabase(t *testing.T) (*sql.DB, func()) {
 
 	// Run migrations
 	migrations := &migrate.FileMigrationSource{
-		Dir: "../../internal/database/migrations",
+		Dir: "../../migrations",
 	}
 
 	n, err := migrate.Exec(db, "postgres", migrations, migrate.Up)

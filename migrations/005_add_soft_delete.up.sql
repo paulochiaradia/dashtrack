@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Add soft delete support
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
 

@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Create companies table
 CREATE TABLE IF NOT EXISTS companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
