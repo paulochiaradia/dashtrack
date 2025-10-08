@@ -19,6 +19,7 @@ import (
 	"github.com/paulochiaradia/dashtrack/internal/middleware"
 	"github.com/paulochiaradia/dashtrack/internal/models"
 	"github.com/paulochiaradia/dashtrack/internal/services"
+	"github.com/paulochiaradia/dashtrack/tests/testutils"
 	"github.com/paulochiaradia/dashtrack/tests/testutils/mocks"
 )
 
@@ -393,7 +394,7 @@ func BenchmarkJSONMarshaling(b *testing.B) {
 		ID:        uuid.New(),
 		Name:      "Test User",
 		Email:     "test@example.com",
-		Phone:     stringPtr("1234567890"),
+		Phone:     testutils.StringPtr("1234567890"),
 		Active:    true,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -437,9 +438,7 @@ func BenchmarkUserListAllocation(b *testing.B) {
 }
 
 // Helper function
-func stringPtr(s string) *string {
-	return &s
-}
+// Helper functions removed - using testutils.StringPtr instead
 
 // Benchmark Report Function
 func BenchmarkReport(b *testing.B) {

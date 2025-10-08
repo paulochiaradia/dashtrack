@@ -18,12 +18,11 @@ import (
 	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/models"
 	"github.com/paulochiaradia/dashtrack/internal/repository"
+	"github.com/paulochiaradia/dashtrack/tests/testutils"
 )
 
 // Helper function for tests
-func stringPtr(s string) *string {
-	return &s
-}
+// Removed stringPtr - using testutils.StringPtr instead
 
 // Mock repositories for testing
 type MockUserRepository struct {
@@ -275,7 +274,7 @@ func (h *TestAuthHandler) LoginGin(c *gin.Context) {
 			Success:       false,
 			IPAddress:     &clientIP,
 			UserAgent:     &userAgent,
-			FailureReason: stringPtr("invalid_email"),
+			FailureReason: testutils.StringPtr("invalid_email"),
 		}
 		h.authLogRepo.Create(authLog)
 
@@ -293,7 +292,7 @@ func (h *TestAuthHandler) LoginGin(c *gin.Context) {
 			Success:       false,
 			IPAddress:     &clientIP,
 			UserAgent:     &userAgent,
-			FailureReason: stringPtr("invalid_password"),
+			FailureReason: testutils.StringPtr("invalid_password"),
 		}
 		h.authLogRepo.Create(authLog)
 

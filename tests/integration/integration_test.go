@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/paulochiaradia/dashtrack/internal/models"
+	"github.com/paulochiaradia/dashtrack/tests/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -67,7 +68,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 					ID:     uuid.New(),
 					Name:   "Admin User",
 					Email:  "admin@example.com",
-					Phone:  stringPtr("123456789"),
+					Phone:  testutils.StringPtr("123456789"),
 					Active: true,
 				},
 			}
@@ -85,7 +86,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 				ID:     uuid.New(),
 				Name:   createReq.Name,
 				Email:  createReq.Email,
-				Phone:  stringPtr(createReq.Phone),
+				Phone:  testutils.StringPtr(createReq.Phone),
 				RoleID: roleID,
 				Active: true,
 			}
@@ -248,9 +249,7 @@ func (suite *IntegrationTestSuite) TestAPIEndpointsFlow() {
 }
 
 // Helper function to create string pointers
-func stringPtr(s string) *string {
-	return &s
-}
+// Helper function for tests - removed, using testutils.StringPtr instead
 
 func TestIntegrationSuite(t *testing.T) {
 	suite.Run(t, new(IntegrationTestSuite))
