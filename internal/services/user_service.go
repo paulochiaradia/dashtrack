@@ -22,6 +22,8 @@ var (
 	ErrInvalidRole             = errors.New("invalid role")
 	ErrInvalidCompany          = errors.New("invalid company")
 	ErrCannotDeleteSelf        = errors.New("cannot delete yourself")
+	ErrRoleRequiresCompany     = errors.New("role requires company assignment")
+	ErrRoleProhibitsCompany    = errors.New("role prohibits company assignment")
 )
 
 // UserService handles user business logic with multi-tenant permissions
@@ -88,13 +90,12 @@ func (s *UserService) GetUsers(ctx context.Context, requesterContext *models.Use
 		total, err = s.userRepo.CountByCompanyAndRoles(ctx, requesterContext.CompanyID, roles)
 
 	case "admin":
-		// General admin can only see drivers and helpers (no company restriction)
-		roles := []string{"driver", "helper"}
-		users, err = s.userRepo.ListByRoles(ctx, roles, req.Limit, offset)
+		// Global admin can see all users from all companies
+		users, err = s.userRepo.List(ctx, req.Limit, offset, req.Active, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list drivers and helpers: %w", err)
+			return nil, fmt.Errorf("failed to list all users: %w", err)
 		}
-		total, err = s.userRepo.CountByCompanyAndRoles(ctx, nil, roles)
+		total, err = s.userRepo.CountUsers(ctx, nil)
 
 	default:
 		return nil, ErrInsufficientPermissions
@@ -139,6 +140,7 @@ func (s *UserService) GetUserByID(ctx context.Context, requesterContext *models.
 func (s *UserService) CreateUser(ctx context.Context, requesterContext *models.UserContext, req models.CreateUserRequest) (*models.User, error) {
 	// Check if requester can create users
 	if !s.canCreateUser(requesterContext, req.RoleID) {
+		fmt.Printf("DEBUG: canCreateUser failed for role %s, requester: %s\n", requesterContext.Role, req.RoleID)
 		return nil, ErrInsufficientPermissions
 	}
 
@@ -159,7 +161,7 @@ func (s *UserService) CreateUser(ctx context.Context, requesterContext *models.U
 
 	// Validate role creation permissions
 	if !s.canCreateUserWithRole(requesterContext, role.Name) {
-		return nil, fmt.Errorf("cannot create user with role %s", role.Name)
+		return nil, ErrInsufficientPermissions
 	}
 
 	// Check if email already exists
@@ -193,6 +195,22 @@ func (s *UserService) CreateUser(ctx context.Context, requesterContext *models.U
 	// Validate company permissions
 	if !s.canAssignToCompany(requesterContext, companyID) {
 		return nil, ErrInsufficientPermissions
+	}
+
+	// Enforce business rule: certain roles MUST have a company
+	rolesRequiringCompany := []string{"company_admin", "driver", "helper", "manager"}
+	for _, requiredRole := range rolesRequiringCompany {
+		if role.Name == requiredRole && companyID == nil {
+			return nil, ErrRoleRequiresCompany
+		}
+	}
+
+	// Enforce business rule: master and admin roles should NOT have a company
+	globalRoles := []string{"master", "admin"}
+	for _, globalRole := range globalRoles {
+		if role.Name == globalRole && companyID != nil {
+			return nil, ErrRoleProhibitsCompany
+		}
 	}
 
 	// Create user
@@ -341,8 +359,8 @@ func (s *UserService) canCreateUserWithRole(requesterContext *models.UserContext
 		}
 		return false
 	case "admin":
-		// Can only create driver and helper
-		return roleName == "driver" || roleName == "helper"
+		// Global admin can create any role except master
+		return roleName != "master"
 	default:
 		return false
 	}
@@ -357,7 +375,8 @@ func (s *UserService) canModifyUser(requesterContext *models.UserContext, target
 			targetUser.CompanyID != nil &&
 			*requesterContext.CompanyID == *targetUser.CompanyID
 	case "admin":
-		return targetUser.Role != nil && (targetUser.Role.Name == "driver" || targetUser.Role.Name == "helper")
+		// Global admin can modify any user except master
+		return targetUser.Role != nil && targetUser.Role.Name != "master"
 	case "driver", "helper":
 		return requesterContext.UserID == targetUser.ID
 	default:
@@ -383,7 +402,8 @@ func (s *UserService) canDeleteUser(requesterContext *models.UserContext, target
 		}
 		return true
 	case "admin":
-		return targetUser.Role != nil && (targetUser.Role.Name == "driver" || targetUser.Role.Name == "helper")
+		// Global admin can delete any user except master
+		return targetUser.Role != nil && targetUser.Role.Name != "master"
 	default:
 		return false
 	}

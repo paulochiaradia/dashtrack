@@ -107,7 +107,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 		       r.id, r.name, r.description, r.created_at, r.updated_at
 		FROM users u
 		JOIN roles r ON u.role_id = r.id
-		WHERE u.id = $1`
+		WHERE u.id = $1 AND u.deleted_at IS NULL`
 
 	user := &models.User{Role: &models.Role{}}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
@@ -160,7 +160,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 		       r.id, r.name, r.description, r.created_at, r.updated_at
 		FROM users u
 		JOIN roles r ON u.role_id = r.id
-		WHERE u.email = $1`
+		WHERE u.email = $1 AND u.deleted_at IS NULL`
 
 	user := &models.User{Role: &models.Role{}}
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
@@ -367,7 +367,7 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		trace.WithAttributes(attribute.String("user.id", id.String())))
 	defer span.End()
 
-	query := `UPDATE users SET active = false, updated_at = $1 WHERE id = $2`
+	query := `UPDATE users SET deleted_at = $1, updated_at = $1 WHERE id = $2`
 
 	_, err := r.db.ExecContext(ctx, query, time.Now(), id)
 	if err != nil {
@@ -387,7 +387,7 @@ func (r *UserRepository) List(ctx context.Context, limit, offset int, active *bo
 		))
 	defer span.End()
 
-	whereConditions := []string{}
+	whereConditions := []string{"u.deleted_at IS NULL"} // Always exclude soft-deleted users
 	args := []interface{}{}
 	argIndex := 1
 
@@ -692,7 +692,7 @@ func (r *UserRepository) ListByCompanyAndRoles(ctx context.Context, companyID *u
 		       r.id, r.name, r.description, r.created_at, r.updated_at
 		FROM users u
 		JOIN roles r ON u.role_id = r.id
-		WHERE r.name IN (` + strings.Join(rolePlaceholders, ",") + `)`
+		WHERE u.deleted_at IS NULL AND r.name IN (` + strings.Join(rolePlaceholders, ",") + `)`
 
 	if companyID != nil {
 		query += fmt.Sprintf(" AND u.company_id = $%d", paramCount)
@@ -773,7 +773,7 @@ func (r *UserRepository) ListByRoles(ctx context.Context, roles []string, limit,
 		       r.id, r.name, r.description, r.created_at, r.updated_at
 		FROM users u
 		JOIN roles r ON u.role_id = r.id
-		WHERE r.name IN (` + strings.Join(rolePlaceholders, ",") + `)
+		WHERE u.deleted_at IS NULL AND r.name IN (` + strings.Join(rolePlaceholders, ",") + `)
 		ORDER BY u.created_at DESC LIMIT $` + fmt.Sprintf("%d", len(roles)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(roles)+2)
 
 	args = append(args, limit, offset)
