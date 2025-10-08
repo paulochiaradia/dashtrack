@@ -41,6 +41,16 @@ type UserContext struct {
 	TenantID *uuid.UUID `json:"tenant_id,omitempty"`
 }
 
+// JWTManagerInterface defines the contract for JWT operations
+type JWTManagerInterface interface {
+	GenerateTokens(userContext UserContext) (accessToken, refreshToken string, err error)
+	ValidateToken(tokenString string) (*JWTClaims, error)
+	ValidateRefreshToken(tokenString string) (uuid.UUID, error)
+	RefreshToken(refreshTokenString string, userContext UserContext) (string, string, error)
+	GeneratePasswordResetToken(userID uuid.UUID, email string) (string, error)
+	ValidatePasswordResetToken(tokenString string) (uuid.UUID, string, error)
+}
+
 // JWTManager handles JWT operations
 type JWTManager struct {
 	secretKey     []byte

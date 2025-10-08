@@ -104,12 +104,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug log - temporary
-	println("🔍 DEBUG - User loaded:", user.Email, "RoleID:", user.RoleID.String())
-	if user.Role != nil {
-		println("🔍 DEBUG - Role loaded:", user.Role.Name, "RoleID:", user.Role.ID.String())
-	} else {
-		println("🔍 DEBUG - Role is nil!")
+	// Verify role was loaded
+	if user.Role == nil {
+		http.Error(w, "User role not found", http.StatusInternalServerError)
+		return
 	}
 
 	// Verify password
@@ -125,7 +123,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Name:     user.Name,
 		RoleID:   user.RoleID,
 		RoleName: user.Role.Name, // Assuming Role is populated
-		TenantID: nil,            // Will be used later for multi-tenancy
+		TenantID: user.CompanyID, // Company ID as TenantID for multi-tenancy
 	}
 
 	// Generate tokens

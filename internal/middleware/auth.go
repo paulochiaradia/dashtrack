@@ -12,10 +12,10 @@ import (
 )
 
 type GinAuthMiddleware struct {
-	jwtManager *auth.JWTManager
+	jwtManager auth.JWTManagerInterface
 }
 
-func NewGinAuthMiddleware(jwtManager *auth.JWTManager) *GinAuthMiddleware {
+func NewGinAuthMiddleware(jwtManager auth.JWTManagerInterface) *GinAuthMiddleware {
 	return &GinAuthMiddleware{
 		jwtManager: jwtManager,
 	}
@@ -54,9 +54,6 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		// Debug log - temporary
-		println("🔍 DEBUG - Claims RoleName:", claims.RoleName, "UserID:", claims.UserID.String())
 
 		// Set user context
 		c.Set("user_id", claims.UserID.String())
