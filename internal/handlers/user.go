@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -129,6 +130,8 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	user, err := h.userService.CreateUser(c.Request.Context(), userContext, req)
 	if err != nil {
+		// Add detailed error logging
+		fmt.Printf("ERROR: CreateUser failed: %v\n", err)
 		switch err {
 		case services.ErrInsufficientPermissions:
 			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
@@ -138,6 +141,10 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role"})
 		case services.ErrInvalidCompany:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid company"})
+		case services.ErrRoleRequiresCompany:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Role requires company assignment"})
+		case services.ErrRoleProhibitsCompany:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Role prohibits company assignment"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}

@@ -143,9 +143,9 @@ func (r *Router) setupRoutes() {
 			userRoutes.DELETE("/:id", r.userHandler.DeleteUser) // Delete user
 		}
 
-		// Admin-only routes
+		// Admin and Company Admin routes (roles that can create users)
 		adminRoutes := protected.Group("")
-		adminRoutes.Use(r.authMiddleware.RequireRole("admin"))
+		adminRoutes.Use(r.authMiddleware.RequireAnyRole("admin", "company_admin"))
 		{
 			adminRoutes.POST("/users", r.userHandler.CreateUser) // Create user
 		}
