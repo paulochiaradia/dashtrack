@@ -21,6 +21,13 @@ FROM golang:1.24-alpine AS dev
 
 WORKDIR /app
 
+# Install dependencies for migrations and networking
+RUN apk add --no-cache netcat-openbsd curl
+
+# Install migrate tool
+RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz && \
+    mv migrate /usr/local/bin/
+
 # Install air for hot reloading
 RUN go install github.com/air-verse/air@v1.60.0
 
@@ -33,8 +40,18 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
+# Copy migration files
+COPY migrations/ /app/migrations/
+
+# Copy and make entrypoint script executable
+COPY scripts/docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port 8080
 EXPOSE 8080
+
+# Use entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Command to run air for hot reloading
 CMD ["air", "-c", ".air.toml"]
@@ -44,12 +61,29 @@ FROM alpine:latest AS production
 
 WORKDIR /app
 
+# Install dependencies for migrations and networking
+RUN apk add --no-cache netcat-openbsd curl
+
+# Install migrate tool
+RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz && \
+    mv migrate /usr/local/bin/
+
 # Copy the binary from the builder stage
 COPY --from=builder /app/main .
 COPY .env .
 
+# Copy migration files
+COPY migrations/ /app/migrations/
+
+# Copy and make entrypoint script executable
+COPY scripts/docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port 8080 to the outside world
 EXPOSE 8080
+
+# Use entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Command to run the executable
 CMD ["/app/main"]

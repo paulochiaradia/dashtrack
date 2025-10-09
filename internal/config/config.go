@@ -51,11 +51,10 @@ func LoadConfig() *Config {
 		}
 
 		viper.AutomaticEnv()
-
 		// Set defaults
 		viper.SetDefault("SERVER_PORT", "8080")
 		viper.SetDefault("SERVER_ENV", "development")
-		viper.SetDefault("JWT_ACCESS_EXPIRE_MINUTES", 15)
+		viper.SetDefault("JWT_ACCESS_EXPIRE_MINUTES", 60) // Aumentado para 60 minutos durante testes
 		viper.SetDefault("JWT_REFRESH_EXPIRE_HOURS", 24)
 		viper.SetDefault("SMTP_PORT", 587)
 		viper.SetDefault("BCRYPT_COST", 12)

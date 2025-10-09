@@ -20,14 +20,12 @@ func (r *Router) setupMasterRoutes() {
 	master.GET("/users/:id", r.userHandler.GetUserByID)
 	master.PUT("/users/:id", r.userHandler.UpdateUser)
 	master.DELETE("/users/:id", r.userHandler.DeleteUser)
-
 	// Company Management (master-only)
-	// TODO: implement company handlers
-	// master.GET("/companies", r.companyHandler.GetCompanies)
-	// master.POST("/companies", r.companyHandler.CreateCompany)
-	// master.GET("/companies/:id", r.companyHandler.GetCompany)
-	// master.PUT("/companies/:id", r.companyHandler.UpdateCompany)
-	// master.DELETE("/companies/:id", r.companyHandler.DeleteCompany)
+	master.GET("/companies", r.companyHandler.GetCompanies)
+	master.POST("/companies", r.companyHandler.CreateCompany)
+	master.GET("/companies/:id", r.companyHandler.GetCompany)
+	master.PUT("/companies/:id", r.companyHandler.UpdateCompany)
+	master.DELETE("/companies/:id", r.companyHandler.DeleteCompany)
 
 	// System-wide Analytics (master-only)
 	// TODO: implement analytics handlers

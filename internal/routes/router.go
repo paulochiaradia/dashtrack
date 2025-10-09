@@ -144,19 +144,15 @@ func (r *Router) setupRoutes() {
 		{
 			adminRoutes.POST("/users", r.userHandler.CreateUser) // Create user
 		}
-
 		// Master-only routes
 		masterRoutes := protected.Group("")
 		masterRoutes.Use(r.authMiddleware.RequireRole("master"))
 		{
 			// Master can access all companies' data
 		}
-
-		// Dashboard route
-		protected.GET("/dashboard", r.dashboardHandler.GetDashboard)
 	}
-
 	// Setup additional role-based routes
+	r.setupProtectedRoutes()
 	r.setupMasterRoutes()
 	r.setupCompanyAdminRoutes()
 	r.setupAdminRoutes()

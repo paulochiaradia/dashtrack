@@ -81,8 +81,8 @@ type CreateUserRequest struct {
 	Name      string  `json:"name" binding:"required,min=2,max=100"`
 	Email     string  `json:"email" binding:"required,email,max=100"`
 	Password  string  `json:"password" binding:"required,min=8,max=255"`
-	Phone     string  `json:"phone,omitempty" binding:"omitempty,max=20"`
-	CPF       string  `json:"cpf,omitempty" binding:"omitempty,len=14"`
+	Phone     string  `json:"phone" binding:"required,min=10,max=20"` // Obrigatório: telefone
+	CPF       string  `json:"cpf" binding:"required,len=14"`          // Obrigatório: CPF no formato XXX.XXX.XXX-XX
 	RoleID    string  `json:"role_id" binding:"required,uuid"`
 	CompanyID *string `json:"company_id,omitempty" binding:"omitempty,uuid"` // For company users
 }

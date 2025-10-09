@@ -45,8 +45,9 @@ type RefreshTokenRequest struct {
 
 // RefreshTokenResponse represents refresh token response payload
 type RefreshTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 // ChangePasswordRequest represents change password request payload
@@ -194,17 +195,17 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		RoleName: user.Role.Name,
 		TenantID: nil,
 	}
-
 	// Generate new access token
-	accessToken, _, err := h.jwtManager.GenerateTokens(userContext)
+	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
 	if err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
 	response := RefreshTokenResponse{
-		AccessToken: accessToken,
-		ExpiresIn:   15 * 60, // 15 minutes in seconds
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    15 * 60, // 15 minutes in seconds
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -411,16 +412,16 @@ func (h *AuthHandler) RefreshTokenGin(c *gin.Context) {
 		RoleName: user.Role.Name,
 		TenantID: user.CompanyID,
 	}
-
-	accessToken, _, err := h.jwtManager.GenerateTokens(userContext)
+	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
 	response := RefreshTokenResponse{
-		AccessToken: accessToken,
-		ExpiresIn:   3600, // 1 hour
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    3600, // 1 hour
 	}
 
 	c.JSON(http.StatusOK, response)
