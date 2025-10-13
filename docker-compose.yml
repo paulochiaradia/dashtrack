@@ -36,13 +36,16 @@ services:
       - dashtrack_dashtrack_network
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:2.2.0
     container_name: dashtrack-jaeger
     ports:
       - "16686:16686"  # Jaeger UI
-      - "14268:14268"  # jaeger.thrift
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+      - "14268:14268"  # jaeger.thrift (legacy compatibility)
     environment:
       - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
     networks:
       - dashtrack_dashtrack_network
 
