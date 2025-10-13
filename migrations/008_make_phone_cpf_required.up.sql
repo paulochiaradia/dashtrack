@@ -31,12 +31,18 @@ ALTER COLUMN phone SET NOT NULL;
 ALTER TABLE users 
 ALTER COLUMN cpf SET NOT NULL;
 
--- Add check constraints for phone format (basic validation)
+-- Add check constraints for phone format (basic validation) - drop and recreate to be safe
+ALTER TABLE users 
+DROP CONSTRAINT IF EXISTS chk_phone_format;
+
 ALTER TABLE users 
 ADD CONSTRAINT chk_phone_format 
 CHECK (phone ~ '^\+[1-9]\d{1,14}$');
 
--- Add check constraint for CPF format (Brazilian format)
+-- Add check constraint for CPF format (Brazilian format) - drop and recreate to be safe
+ALTER TABLE users 
+DROP CONSTRAINT IF EXISTS chk_cpf_format;
+
 ALTER TABLE users 
 ADD CONSTRAINT chk_cpf_format 
 CHECK (cpf ~ '^\d{3}\.\d{3}\.\d{3}-\d{2}$');

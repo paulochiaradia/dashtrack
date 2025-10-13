@@ -24,7 +24,10 @@ CREATE INDEX IF NOT EXISTS idx_companies_slug ON companies(slug);
 CREATE INDEX IF NOT EXISTS idx_companies_status ON companies(status);
 CREATE INDEX IF NOT EXISTS idx_companies_plan ON companies(subscription_plan);
 
--- Add foreign key constraint for users.company_id
+-- Add foreign key constraint for users.company_id (only if it doesn't exist)
+ALTER TABLE users 
+DROP CONSTRAINT IF EXISTS fk_users_company_id;
+
 ALTER TABLE users 
 ADD CONSTRAINT fk_users_company_id 
 FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL;

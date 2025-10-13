@@ -44,8 +44,12 @@ COPY . .
 COPY migrations/ /app/migrations/
 
 # Copy and make entrypoint script executable
+# Note: we use sed to convert CRLF to LF to avoid Windows line ending issues
 COPY scripts/docker-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN apk add --no-cache dos2unix && \
+    dos2unix /entrypoint.sh && \
+    chmod +x /entrypoint.sh && \
+    apk del dos2unix
 
 # Expose port 8080
 EXPOSE 8080
@@ -76,8 +80,12 @@ COPY .env .
 COPY migrations/ /app/migrations/
 
 # Copy and make entrypoint script executable
+# Note: we use sed to convert CRLF to LF to avoid Windows line ending issues
 COPY scripts/docker-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN apk add --no-cache dos2unix && \
+    dos2unix /entrypoint.sh && \
+    chmod +x /entrypoint.sh && \
+    apk del dos2unix
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
