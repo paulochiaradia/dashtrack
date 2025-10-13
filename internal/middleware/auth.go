@@ -131,6 +131,7 @@ func (m *GinAuthMiddleware) RequireAnyRole(roles ...string) gin.HandlerFunc {
 }
 
 // RequireAdminRole middleware ensures the user has admin role (technical/operational admin)
+// Master role has universal access to all routes
 func (m *GinAuthMiddleware) RequireAdminRole() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, exists := c.Get("role_name")
@@ -141,6 +142,13 @@ func (m *GinAuthMiddleware) RequireAdminRole() gin.HandlerFunc {
 		}
 
 		userRoleStr := userRole.(string)
+
+		// Master role has universal access
+		if userRoleStr == "master" {
+			c.Next()
+			return
+		}
+
 		if userRoleStr != "admin" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Admin role required for technical operations"})
 			c.Abort()

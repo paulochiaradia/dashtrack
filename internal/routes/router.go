@@ -165,7 +165,7 @@ func (r *Router) setupRoutes() {
 	r.setupCompanyAdminRoutes()
 	r.setupAdminRoutes()
 	r.setupManagerRoutes()
-	r.setupTeamRoutes()    // Team management routes
+	r.setupTeamRoutes()      // Team management routes
 	r.setupVehicleRoutes(v1) // Vehicle management routes (Phase 4)
 	r.setupHealthRoutes()
 	r.setupSecurityRoutes()

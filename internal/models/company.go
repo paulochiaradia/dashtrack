@@ -58,22 +58,22 @@ type TeamMember struct {
 
 // Vehicle represents a company vehicle with IoT sensors
 type Vehicle struct {
-	ID           uuid.UUID  `json:"id" db:"id"`
-	CompanyID    uuid.UUID  `json:"company_id" db:"company_id"`
-	TeamID       *uuid.UUID `json:"team_id" db:"team_id"`
-	LicensePlate string     `json:"license_plate" db:"license_plate"`
-	Brand        string     `json:"brand" db:"brand"`
-	Model        string     `json:"model" db:"model"`
-	Year         int        `json:"year" db:"year"`
-	Color        *string    `json:"color" db:"color"`
-	VehicleType  string     `json:"vehicle_type" db:"vehicle_type"`
-	FuelType     string     `json:"fuel_type" db:"fuel_type"`
-	CargoCapacity *float64  `json:"cargo_capacity" db:"cargo_capacity"`
-	DriverID     *uuid.UUID `json:"driver_id" db:"driver_id"`
-	HelperID     *uuid.UUID `json:"helper_id" db:"helper_id"`
-	Status       string     `json:"status" db:"status"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	ID            uuid.UUID  `json:"id" db:"id"`
+	CompanyID     uuid.UUID  `json:"company_id" db:"company_id"`
+	TeamID        *uuid.UUID `json:"team_id" db:"team_id"`
+	LicensePlate  string     `json:"license_plate" db:"license_plate"`
+	Brand         string     `json:"brand" db:"brand"`
+	Model         string     `json:"model" db:"model"`
+	Year          int        `json:"year" db:"year"`
+	Color         *string    `json:"color" db:"color"`
+	VehicleType   string     `json:"vehicle_type" db:"vehicle_type"`
+	FuelType      string     `json:"fuel_type" db:"fuel_type"`
+	CargoCapacity *float64   `json:"cargo_capacity" db:"cargo_capacity"`
+	DriverID      *uuid.UUID `json:"driver_id" db:"driver_id"`
+	HelperID      *uuid.UUID `json:"helper_id" db:"helper_id"`
+	Status        string     `json:"status" db:"status"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Populated fields
 	Company      *Company      `json:"company,omitempty"`
@@ -171,17 +171,17 @@ type CreateTeamRequest struct {
 
 // CreateVehicleRequest represents request to create a new vehicle
 type CreateVehicleRequest struct {
-	TeamID       *uuid.UUID `json:"team_id"`
-	LicensePlate string     `json:"license_plate" binding:"required,min=3,max=20"`
-	Brand        string     `json:"brand" binding:"required"`
-	Model        string     `json:"model" binding:"required"`
-	Year         int        `json:"year" binding:"required,min=1900,max=2100"`
-	Color        *string    `json:"color"`
-	VehicleType  string     `json:"vehicle_type" binding:"required,oneof=truck van car motorcycle bus"`
-	FuelType     string     `json:"fuel_type" binding:"required,oneof=gasoline diesel electric hybrid cng"`
-	CargoCapacity *float64  `json:"cargo_capacity"`
-	DriverID     *uuid.UUID `json:"driver_id"`
-	HelperID     *uuid.UUID `json:"helper_id"`
+	TeamID        *uuid.UUID `json:"team_id"`
+	LicensePlate  string     `json:"license_plate" binding:"required,min=3,max=20"`
+	Brand         string     `json:"brand" binding:"required"`
+	Model         string     `json:"model" binding:"required"`
+	Year          int        `json:"year" binding:"required,min=1900,max=2100"`
+	Color         *string    `json:"color"`
+	VehicleType   string     `json:"vehicle_type" binding:"required,oneof=truck van car motorcycle bus"`
+	FuelType      string     `json:"fuel_type" binding:"required,oneof=gasoline diesel electric hybrid cng"`
+	CargoCapacity *float64   `json:"cargo_capacity"`
+	DriverID      *uuid.UUID `json:"driver_id"`
+	HelperID      *uuid.UUID `json:"helper_id"`
 }
 
 // CreateESP32DeviceRequest represents request to register a new ESP32 device
