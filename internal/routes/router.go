@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
-	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/config"
 	"github.com/paulochiaradia/dashtrack/internal/handlers"
 	"github.com/paulochiaradia/dashtrack/internal/middleware"
@@ -29,7 +28,7 @@ type Router struct {
 	securityHandler  *handlers.SecurityHandler
 	sessionHandler   *handlers.SessionHandler
 	dashboardHandler *handlers.DashboardHandler
-	jwtManager       *auth.JWTManager
+	tokenService     *services.TokenService
 	authMiddleware   *middleware.GinAuthMiddleware
 }
 
@@ -55,7 +54,6 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	// Services
 	accessExpiry := time.Duration(cfg.JWTAccessExpireMinutes) * time.Minute
 	refreshExpiry := time.Duration(cfg.JWTRefreshExpireHours) * time.Hour
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, accessExpiry, refreshExpiry, cfg.AppName)
 	tokenService := services.NewTokenService(sqlxDB, cfg.JWTSecret, accessExpiry, refreshExpiry)
 	twoFactorService := services.NewTwoFactorService(sqlxDB)
 	auditService := services.NewAuditService(sqlxDB)
@@ -63,7 +61,7 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	userService := services.NewUserService(userRepo, roleRepo, cfg.BcryptCost)
 
 	// Handlers
-	authHandler := handlers.NewAuthHandler(userRepo, authLogRepo, jwtManager, tokenService, cfg.BcryptCost)
+	authHandler := handlers.NewAuthHandler(userRepo, authLogRepo, roleRepo, tokenService, cfg.BcryptCost)
 	userHandler := handlers.NewUserHandler(userService)
 	sensorHandler := handlers.NewSensorHandler(sensorRepo)
 	companyHandler := handlers.NewCompanyHandler(companyRepo)
@@ -75,7 +73,7 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	dashboardHandler := handlers.NewDashboardHandler(userRepo, authLogRepo, sessionRepo, companyRepo)
 
 	// Middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(jwtManager)
+	authMiddleware := middleware.NewGinAuthMiddleware(tokenService)
 
 	router := &Router{
 		engine:           gin.New(),
@@ -91,7 +89,7 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 		securityHandler:  securityHandler,
 		sessionHandler:   sessionHandler,
 		dashboardHandler: dashboardHandler,
-		jwtManager:       jwtManager,
+		tokenService:     tokenService,
 		authMiddleware:   authMiddleware,
 	}
 

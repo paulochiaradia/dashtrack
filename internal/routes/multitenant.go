@@ -5,8 +5,8 @@ import (
 )
 
 func (r *Router) setupMultiTenantRoutes() {
-	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	// Use router's auth middleware (already configured with tokenService)
+	authMiddleware := r.authMiddleware
 
 	// Multi-tenant API routes - require authentication and company context
 	api := r.engine.Group("/api/v1")

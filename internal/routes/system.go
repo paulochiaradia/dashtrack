@@ -1,13 +1,9 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 // setupSystemRoutes sets up routes accessible by both master and admin
 func (r *Router) setupSystemRoutes() {
 	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	authMiddleware := r.authMiddleware
 
 	// System routes (shared between master and admin)
 	// Both roles can access these, but with different purposes:

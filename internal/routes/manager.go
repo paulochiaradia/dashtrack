@@ -1,12 +1,8 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 func (r *Router) setupManagerRoutes() {
 	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	authMiddleware := r.authMiddleware
 
 	// Manager routes (manager and admin)
 	manager := r.engine.Group("/api/v1/manager")

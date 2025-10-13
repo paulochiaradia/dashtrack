@@ -1,13 +1,9 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 // setupSessionRoutes sets up session management routes
 func (r *Router) setupSessionRoutes() {
 	// Create auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	authMiddleware := r.authMiddleware
 
 	// Session management routes (protected)
 	sessions := r.engine.Group("/api/v1/sessions")

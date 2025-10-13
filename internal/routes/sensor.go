@@ -5,13 +5,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/paulochiaradia/dashtrack/internal/handlers"
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
 )
 
 // SetupSensorRoutes configura as rotas relacionadas a sensores IoT
 func (r *Router) SetupSensorRoutes(sensorHandler *handlers.SensorHandler) {
-	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	// Use router's auth middleware (already configured with tokenService)
+	authMiddleware := r.authMiddleware
 
 	// Grupo de rotas para sensores (requer autenticação)
 	sensorGroup := r.engine.Group("/api/v1/sensors")

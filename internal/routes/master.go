@@ -1,12 +1,8 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 func (r *Router) setupMasterRoutes() {
 	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	authMiddleware := r.authMiddleware
 
 	// Master routes (super-admin/master only)
 	// Master = System Owner (full access to everything)

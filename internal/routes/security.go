@@ -6,8 +6,8 @@ import (
 
 // setupSecurityRoutes sets up security-related routes
 func (r *Router) setupSecurityRoutes() {
-	// Create auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	// Use router's auth middleware (already configured with tokenService)
+	authMiddleware := r.authMiddleware
 
 	// Create rate limiter
 	rateLimiter := middleware.NewRateLimiter(r.db)

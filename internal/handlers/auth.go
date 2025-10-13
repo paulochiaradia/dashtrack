@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/repository"
 	"github.com/paulochiaradia/dashtrack/internal/services"
 )
@@ -19,7 +17,7 @@ import (
 type AuthHandler struct {
 	userRepo     repository.UserRepositoryInterface
 	authLogRepo  repository.AuthLogRepositoryInterface
-	jwtManager   *auth.JWTManager
+	roleRepo     repository.RoleRepositoryInterface
 	tokenService *services.TokenService
 	bcryptCost   int
 }
@@ -70,245 +68,14 @@ type UserResponse struct {
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(userRepo repository.UserRepositoryInterface, authLogRepo repository.AuthLogRepositoryInterface, jwtManager *auth.JWTManager, tokenService *services.TokenService, bcryptCost int) *AuthHandler {
+func NewAuthHandler(userRepo repository.UserRepositoryInterface, authLogRepo repository.AuthLogRepositoryInterface, roleRepo repository.RoleRepositoryInterface, tokenService *services.TokenService, bcryptCost int) *AuthHandler {
 	return &AuthHandler{
 		userRepo:     userRepo,
 		authLogRepo:  authLogRepo,
-		jwtManager:   jwtManager,
+		roleRepo:     roleRepo,
 		tokenService: tokenService,
 		bcryptCost:   bcryptCost,
 	}
-}
-
-// Login handles user login
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Get user by email with role information
-	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Check if user is active
-	if !user.Active {
-		http.Error(w, "Account is disabled", http.StatusUnauthorized)
-		return
-	}
-
-	// Verify role was loaded
-	if user.Role == nil {
-		http.Error(w, "User role not found", http.StatusInternalServerError)
-		return
-	}
-
-	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		return
-	}
-
-	// Create user context for JWT
-	userContext := auth.UserContext{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Name:     user.Name,
-		RoleID:   user.RoleID,
-		RoleName: user.Role.Name, // Assuming Role is populated
-		TenantID: user.CompanyID, // Company ID as TenantID for multi-tenancy
-	}
-
-	// Generate tokens
-	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
-	if err != nil {
-		http.Error(w, "Failed to generate tokens", http.StatusInternalServerError)
-		return
-	}
-
-	// Prepare response
-	response := LoginResponse{
-		User: UserResponse{
-			ID:     user.ID.String(),
-			Name:   user.Name,
-			Email:  user.Email,
-			Phone:  getStringValue(user.Phone),
-			Role:   user.Role.Name,
-			Active: user.Active,
-			Avatar: getStringValue(user.Avatar),
-		},
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    15 * 60, // 15 minutes in seconds
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// RefreshToken handles token refresh
-func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	var req RefreshTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Validate refresh token
-	userID, err := h.jwtManager.ValidateRefreshToken(req.RefreshToken)
-	if err != nil {
-		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
-		return
-	}
-
-	// Get fresh user data
-	user, err := h.userRepo.GetByID(r.Context(), userID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "User not found", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Check if user is still active
-	if !user.Active {
-		http.Error(w, "Account is disabled", http.StatusUnauthorized)
-		return
-	}
-
-	// Create fresh user context
-	userContext := auth.UserContext{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Name:     user.Name,
-		RoleID:   user.RoleID,
-		RoleName: user.Role.Name,
-		TenantID: nil,
-	}
-	// Generate new access token
-	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
-	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return
-	}
-
-	response := RefreshTokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    15 * 60, // 15 minutes in seconds
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// Me returns current user information
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
-	userContext, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "User context not found", http.StatusInternalServerError)
-		return
-	}
-
-	// Get fresh user data
-	user, err := h.userRepo.GetByID(r.Context(), userContext.UserID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := UserResponse{
-		ID:     user.ID.String(),
-		Name:   user.Name,
-		Email:  user.Email,
-		Phone:  getStringValue(user.Phone),
-		Role:   user.Role.Name,
-		Active: user.Active,
-		Avatar: getStringValue(user.Avatar),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// Logout handles user logout (in a stateless JWT system, this is mainly for client-side cleanup)
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// In a stateless JWT system, logout is mainly handled client-side
-	// Here we could implement token blacklisting if needed in the future
-
-	response := map[string]string{
-		"message": "Successfully logged out",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// ChangePassword handles password change
-func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
-	userContext, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "User context not found", http.StatusInternalServerError)
-		return
-	}
-
-	var req struct {
-		CurrentPassword string `json:"current_password" validate:"required"`
-		NewPassword     string `json:"new_password" validate:"required,min=6"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Get current user
-	user, err := h.userRepo.GetByID(r.Context(), userContext.UserID)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Verify current password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
-		http.Error(w, "Current password is incorrect", http.StatusBadRequest)
-		return
-	}
-
-	// Hash new password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-		return
-	}
-
-	// Update password using the dedicated repository method
-	err = h.userRepo.UpdatePassword(r.Context(), userContext.UserID, string(hashedPassword))
-	if err != nil {
-		http.Error(w, "Failed to update password", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]string{
-		"message": "Password updated successfully",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
 }
 
 // Helper function to get string value from pointer
@@ -319,7 +86,9 @@ func getStringValue(s *string) string {
 	return *s
 }
 
-// Gin Framework Methods
+// ============================================================================
+// GIN FRAMEWORK HANDLERS
+// ============================================================================
 
 // LoginGin handles login requests using Gin framework
 func (h *AuthHandler) LoginGin(c *gin.Context) {
@@ -340,6 +109,12 @@ func (h *AuthHandler) LoginGin(c *gin.Context) {
 		return
 	}
 
+	// Check if user is active
+	if !user.Active {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is inactive"})
+		return
+	}
+
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
 	if err != nil {
@@ -347,17 +122,14 @@ func (h *AuthHandler) LoginGin(c *gin.Context) {
 		return
 	}
 
-	// Generate tokens
-	userContext := auth.UserContext{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Name:     user.Name,
-		RoleID:   user.RoleID,
-		RoleName: user.Role.Name,
-		TenantID: user.CompanyID,
-	}
+	// Update last login
+	_ = h.userRepo.UpdateLastLogin(c.Request.Context(), user.ID)
 
-	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
+	// Generate token pair using tokenService (with session management)
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	tokenPair, err := h.tokenService.GenerateTokenPair(c.Request.Context(), user, clientIP, userAgent)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tokens"})
 		return
@@ -373,9 +145,9 @@ func (h *AuthHandler) LoginGin(c *gin.Context) {
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 		},
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    3600, // 1 hour
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresIn:    int64(tokenPair.ExpiresIn),
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -389,39 +161,21 @@ func (h *AuthHandler) RefreshTokenGin(c *gin.Context) {
 		return
 	}
 
-	// Validate refresh token and get user ID
-	userID, err := h.jwtManager.ValidateRefreshToken(req.RefreshToken)
+	// Get client info
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	// Refresh token pair using tokenService
+	tokenPair, err := h.tokenService.RefreshTokenPair(c.Request.Context(), req.RefreshToken, clientIP, userAgent)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
 	}
 
-	// Get user details
-	user, err := h.userRepo.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found"})
-		return
-	}
-
-	// Generate new access token
-	userContext := auth.UserContext{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Name:     user.Name,
-		RoleID:   user.RoleID,
-		RoleName: user.Role.Name,
-		TenantID: user.CompanyID,
-	}
-	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
 	response := RefreshTokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    3600, // 1 hour
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresIn:    int64(tokenPair.ExpiresIn),
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -530,27 +284,82 @@ func (h *AuthHandler) MeGin(c *gin.Context) {
 
 // GetRolesGin returns available roles using Gin framework
 func (h *AuthHandler) GetRolesGin(c *gin.Context) {
-	// TODO: Implement role repository and handler
-	// For now, return basic roles
-	roles := []gin.H{
-		{"id": "1", "name": "master", "description": "Master administrator"},
-		{"id": "2", "name": "company_admin", "description": "Company administrator"},
-		{"id": "3", "name": "admin", "description": "Administrator"},
-		{"id": "4", "name": "driver", "description": "Driver"},
-		{"id": "5", "name": "helper", "description": "Helper"},
+	roles, err := h.roleRepo.GetAll(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve roles"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"roles": roles})
 }
 
+// ForgotPasswordRequest represents forgot password request payload
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// ResetPasswordRequest represents reset password request payload
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=6"`
+}
+
 // ForgotPasswordGin handles forgot password requests using Gin framework
 func (h *AuthHandler) ForgotPasswordGin(c *gin.Context) {
-	// TODO: Implement forgot password functionality
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "Forgot password functionality not implemented yet"})
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	// Check if user exists
+	user, err := h.userRepo.GetByEmail(c.Request.Context(), req.Email)
+	if err != nil {
+		// For security, always return success even if user doesn't exist
+		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link will be sent"})
+		return
+	}
+
+	if !user.Active {
+		// Don't reveal that account is inactive
+		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link will be sent"})
+		return
+	}
+
+	// TODO: Generate password reset token and send email
+	// For now, we'll return a placeholder response
+	// In production, you would:
+	// 1. Generate a secure reset token with expiration
+	// 2. Store it in database (password_reset_tokens table)
+	// 3. Send email with reset link containing the token
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "If the email exists, a password reset link will be sent",
+		// TODO: Remove this in production
+		"note": "Email sending not yet implemented. Password reset token would be sent to: " + req.Email,
+	})
 }
 
 // ResetPasswordGin handles password reset using Gin framework
 func (h *AuthHandler) ResetPasswordGin(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
 	// TODO: Implement password reset functionality
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "Password reset functionality not implemented yet"})
+	// In production, you would:
+	// 1. Validate the reset token from database
+	// 2. Check if token is not expired
+	// 3. Get user ID from token
+	// 4. Hash new password
+	// 5. Update user password
+	// 6. Invalidate/delete the reset token
+	// 7. Optionally: Invalidate all existing sessions
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Password reset functionality is not fully implemented yet",
+		"note":    "Requires password_reset_tokens table and email service",
+	})
 }

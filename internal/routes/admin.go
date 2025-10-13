@@ -1,12 +1,8 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 func (r *Router) setupAdminRoutes() {
-	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	// Use router's auth middleware (already configured with tokenService)
+	authMiddleware := r.authMiddleware
 
 	// Admin routes (technical/operational administration)
 	// Admin = System Administrator (technical operations)

@@ -1,12 +1,8 @@
 package routes
 
-import (
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-)
-
 func (r *Router) setupProtectedRoutes() {
 	// Create Gin middleware from auth middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(r.jwtManager)
+	authMiddleware := r.authMiddleware
 
 	// Protected routes (require authentication)
 	protected := r.engine.Group("/api/v1")

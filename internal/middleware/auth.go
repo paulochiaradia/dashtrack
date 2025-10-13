@@ -5,17 +5,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/models"
+	"github.com/paulochiaradia/dashtrack/internal/services"
 )
 
 type GinAuthMiddleware struct {
-	jwtManager auth.JWTManagerInterface
+	tokenService *services.TokenService
 }
 
-func NewGinAuthMiddleware(jwtManager auth.JWTManagerInterface) *GinAuthMiddleware {
+func NewGinAuthMiddleware(tokenService *services.TokenService) *GinAuthMiddleware {
 	return &GinAuthMiddleware{
-		jwtManager: jwtManager,
+		tokenService: tokenService,
 	}
 }
 
@@ -39,8 +39,8 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		tokenString := tokenParts[1]
 
-		// Validate token using JWTManager
-		claims, err := m.jwtManager.ValidateToken(tokenString)
+		// Validate token using TokenService
+		user, err := m.tokenService.ValidateAccessToken(c.Request.Context(), tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
@@ -48,23 +48,23 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 		}
 
 		// Set user context
-		c.Set("user_id", claims.UserID.String())
-		c.Set("email", claims.Email)
-		c.Set("name", claims.Name)
-		c.Set("role_id", claims.RoleID.String())
-		c.Set("role_name", claims.RoleName)
-		c.Set("user_role", claims.RoleName) // For compatibility with UserHandler
-		if claims.TenantID != nil {
-			c.Set("tenant_id", claims.TenantID.String())
-			c.Set("company_id", claims.TenantID.String()) // For compatibility with UserHandler
+		c.Set("user_id", user.ID.String())
+		c.Set("email", user.Email)
+		c.Set("name", user.Name)
+		c.Set("role_id", user.RoleID.String())
+		c.Set("role_name", user.Role.Name)
+		c.Set("user_role", user.Role.Name) // For compatibility with UserHandler
+		if user.CompanyID != nil {
+			c.Set("tenant_id", user.CompanyID.String())
+			c.Set("company_id", user.CompanyID.String()) // For compatibility with UserHandler
 		}
 
 		// Create user context for multitenant middleware
 		userContext := &models.UserContext{
-			UserID:    claims.UserID,
-			CompanyID: claims.TenantID, // TenantID maps to CompanyID
-			Role:      claims.RoleName,
-			IsMaster:  claims.RoleName == "master",
+			UserID:    user.ID,
+			CompanyID: user.CompanyID,
+			Role:      user.Role.Name,
+			IsMaster:  user.Role.Name == "master",
 		}
 		c.Set("userContext", userContext)
 
