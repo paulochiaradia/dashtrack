@@ -12,18 +12,22 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/paulochiaradia/dashtrack/internal/logger"
+	"github.com/paulochiaradia/dashtrack/internal/metrics"
 	"github.com/paulochiaradia/dashtrack/internal/models"
+	"github.com/paulochiaradia/dashtrack/internal/repository"
 )
 
 // AuditService handles audit logging
 type AuditService struct {
-	db *sqlx.DB
+	db   *sqlx.DB
+	repo repository.AuditLogRepositoryInterface
 }
 
 // NewAuditService creates a new audit service
 func NewAuditService(db *sqlx.DB) *AuditService {
 	return &AuditService{
-		db: db,
+		db:   db,
+		repo: repository.NewAuditLogRepository(db),
 	}
 }
 
@@ -132,6 +136,39 @@ func (as *AuditService) LogAuthentication(ctx context.Context, userID *uuid.UUID
 		Success:      success,
 		ErrorMessage: errorMsg,
 	})
+}
+
+// LogHTTPRequest logs HTTP requests automatically (used by audit middleware)
+func (as *AuditService) LogHTTPRequest(ctx context.Context, auditLog *models.AuditLog) error {
+	// Store asynchronously to avoid blocking main flow
+	go func() {
+		err := as.storeAuditLog(context.Background(), auditLog)
+		if err != nil {
+			method := "UNKNOWN"
+			if auditLog.Method != nil {
+				method = *auditLog.Method
+			}
+			path := "UNKNOWN"
+			if auditLog.Path != nil {
+				path = *auditLog.Path
+			}
+			
+			logger.Error("Failed to store HTTP audit log",
+				zap.Error(err),
+				zap.String("method", method),
+				zap.String("path", path),
+				zap.String("action", auditLog.Action),
+			)
+			
+			// Increment error metric
+			metrics.IncrementDatabaseWriteError()
+		} else {
+			// Increment successful write metric
+			metrics.IncrementDatabaseWrite()
+		}
+	}()
+
+	return nil
 }
 
 // LogUserAction logs user management actions
@@ -323,28 +360,139 @@ func (as *AuditService) CleanupOldLogs(ctx context.Context, retentionDays int) e
 
 // storeAuditLog stores an audit log entry in the database
 func (as *AuditService) storeAuditLog(ctx context.Context, log *models.AuditLog) error {
-	// Convert details to JSON
-	var detailsJSON []byte
-	var err error
-	if log.Details != nil {
-		detailsJSON, err = json.Marshal(log.Details)
-		if err != nil {
-			return fmt.Errorf("failed to marshal details: %w", err)
-		}
+	return as.repo.Create(ctx, log)
+}
+
+// GetLogs retrieves audit logs with filters
+func (as *AuditService) GetLogs(ctx context.Context, filter *models.AuditLogFilter) ([]*models.AuditLog, int64, error) {
+	// Set default limit if not specified
+	if filter.Limit == 0 {
+		filter.Limit = 50
 	}
 
-	query := `
-		INSERT INTO audit_logs (
-			id, user_id, action, resource, resource_id, ip_address, user_agent,
-			details, success, error_message, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`
+	// Get logs
+	logs, err := as.repo.List(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
 
-	_, err = as.db.ExecContext(ctx, query,
-		log.ID, log.UserID, log.Action, log.Resource, log.ResourceID,
-		log.IPAddress, log.UserAgent, detailsJSON, log.Success,
-		log.ErrorMessage, log.CreatedAt,
-	)
+	// Get total count
+	total, err := as.repo.Count(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
 
-	return err
+	return logs, total, nil
+}
+
+// GetLogByID retrieves a specific audit log
+func (as *AuditService) GetLogByID(ctx context.Context, id uuid.UUID) (*models.AuditLog, error) {
+	return as.repo.GetByID(ctx, id)
+}
+
+// GetStats retrieves audit log statistics
+func (as *AuditService) GetStats(ctx context.Context, filter *models.AuditLogFilter) (*models.AuditLogStats, error) {
+	return as.repo.GetStats(ctx, filter)
+}
+
+// GetByTraceID retrieves all logs for a Jaeger trace
+func (as *AuditService) GetByTraceID(ctx context.Context, traceID string) ([]*models.AuditLog, error) {
+	return as.repo.GetByTraceID(ctx, traceID)
+}
+
+// ExportLogs exports audit logs to JSON or CSV format
+func (as *AuditService) ExportLogs(ctx context.Context, filter *models.AuditLogFilter, format string) ([]byte, error) {
+	// Get all logs without pagination for export
+	filter.Limit = 0
+	filter.Offset = 0
+
+	logs, err := as.repo.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	switch format {
+	case "json":
+		return json.MarshalIndent(logs, "", "  ")
+	case "csv":
+		return exportToCSV(logs)
+	default:
+		return nil, fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+// exportToCSV converts audit logs to CSV format
+func exportToCSV(logs []*models.AuditLog) ([]byte, error) {
+	var csv string
+	
+	// Header
+	csv += "ID,Timestamp,User ID,User Email,Company ID,Action,Resource,Resource ID,Method,Path,IP Address,Success,Status Code,Duration (ms),Trace ID\n"
+
+	// Rows
+	for _, log := range logs {
+		userID := ""
+		if log.UserID != nil {
+			userID = log.UserID.String()
+		}
+
+		userEmail := ""
+		if log.UserEmail != nil {
+			userEmail = *log.UserEmail
+		}
+
+		companyID := ""
+		if log.CompanyID != nil {
+			companyID = log.CompanyID.String()
+		}
+
+		resourceID := ""
+		if log.ResourceID != nil {
+			resourceID = *log.ResourceID
+		}
+
+		method := ""
+		if log.Method != nil {
+			method = *log.Method
+		}
+
+		path := ""
+		if log.Path != nil {
+			path = *log.Path
+		}
+
+		statusCode := ""
+		if log.StatusCode != nil {
+			statusCode = fmt.Sprintf("%d", *log.StatusCode)
+		}
+
+		durationMs := ""
+		if log.DurationMs != nil {
+			durationMs = fmt.Sprintf("%d", *log.DurationMs)
+		}
+
+		traceID := ""
+		if log.TraceID != nil {
+			traceID = *log.TraceID
+		}
+
+		csv += fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%t,%s,%s,%s\n",
+			log.ID.String(),
+			log.CreatedAt.Format(time.RFC3339),
+			userID,
+			userEmail,
+			companyID,
+			log.Action,
+			log.Resource,
+			resourceID,
+			method,
+			path,
+			log.IPAddress,
+			log.Success,
+			statusCode,
+			durationMs,
+			traceID,
+		)
+	}
+
+	return []byte(csv), nil
 }

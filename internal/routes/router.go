@@ -28,7 +28,9 @@ type Router struct {
 	securityHandler  *handlers.SecurityHandler
 	sessionHandler   *handlers.SessionHandler
 	dashboardHandler *handlers.DashboardHandler
+	auditHandler     *handlers.AuditHandler
 	tokenService     *services.TokenService
+	auditService     *services.AuditService
 	authMiddleware   *middleware.GinAuthMiddleware
 }
 
@@ -71,6 +73,7 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	securityHandler := handlers.NewSecurityHandler(tokenService, twoFactorService, auditService)
 	sessionHandler := handlers.NewSessionHandler(sessionManager)
 	dashboardHandler := handlers.NewDashboardHandler(userRepo, authLogRepo, sessionRepo, companyRepo)
+	auditHandler := handlers.NewAuditHandler(auditService)
 
 	// Middleware
 	authMiddleware := middleware.NewGinAuthMiddleware(tokenService)
@@ -89,7 +92,9 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 		securityHandler:  securityHandler,
 		sessionHandler:   sessionHandler,
 		dashboardHandler: dashboardHandler,
+		auditHandler:     auditHandler,
 		tokenService:     tokenService,
+		auditService:     auditService,
 		authMiddleware:   authMiddleware,
 	}
 
@@ -101,6 +106,11 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 
 func (r *Router) setupMiddleware() {
 	r.engine.Use(gin.Recovery())
+	
+	// Audit middleware - logs all HTTP requests automatically
+	// Skips health and metrics endpoints
+	r.engine.Use(middleware.AuditMiddleware(r.auditService))
+	
 	// TODO: Add other middlewares when they are implemented
 	// r.engine.Use(middleware.GinLoggingMiddleware())
 	// r.engine.Use(middleware.CORSMiddleware())
@@ -158,6 +168,7 @@ func (r *Router) setupRoutes() {
 	r.setupHealthRoutes()
 	r.setupSecurityRoutes()
 	r.setupSessionRoutes()
+	r.setupAuditRoutes(v1) // Audit logs routes
 }
 
 // Engine returns the gin engine

@@ -1,3 +1,4 @@
+-- +migrate Up
 -- Create password reset tokens table
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
