@@ -22,19 +22,6 @@ func (r *Router) setupCompanyAdminRoutes() {
 	// companyAdmin.GET("/settings", r.companyHandler.GetCompanySettings)
 	// companyAdmin.PUT("/settings", r.companyHandler.UpdateCompanySettings)
 
-	// Team Management (company_admin-only)
-	// TODO: implement team handlers
-	// companyAdmin.GET("/teams", r.teamHandler.GetTeams)
-	// companyAdmin.POST("/teams", r.teamHandler.CreateTeam)
-	// companyAdmin.GET("/teams/:id", r.teamHandler.GetTeam)
-	// companyAdmin.PUT("/teams/:id", r.teamHandler.UpdateTeam)
-	// companyAdmin.DELETE("/teams/:id", r.teamHandler.DeleteTeam)
-
-	// Vehicle Management (company_admin-only)
-	// TODO: implement vehicle handlers for company admin
-	// companyAdmin.GET("/vehicles", r.vehicleHandler.GetCompanyVehicles)
-	// companyAdmin.POST("/vehicles", r.vehicleHandler.CreateVehicle)
-	// companyAdmin.GET("/vehicles/:id", r.vehicleHandler.GetVehicle)
-	// companyAdmin.PUT("/vehicles/:id", r.vehicleHandler.UpdateVehicle)
-	// companyAdmin.DELETE("/vehicles/:id", r.vehicleHandler.DeleteVehicle)
+	// NOTE: Team management routes moved to internal/routes/team.go (r.setupTeamRoutes)
+	// NOTE: Vehicle management routes will be implemented separately
 }

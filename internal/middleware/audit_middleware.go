@@ -51,7 +51,7 @@ func AuditMiddleware(auditService *services.AuditService) gin.HandlerFunc {
 		action := mapMethodToAction(c.Request.Method)
 		resource := extractResource(c.Request.URL.Path)
 		resourceIDUUID := extractResourceID(c)
-		
+
 		// Convert resourceID UUID to string
 		var resourceID *string
 		if resourceIDUUID != nil {
@@ -71,7 +71,7 @@ func AuditMiddleware(auditService *services.AuditService) gin.HandlerFunc {
 				errorMessagePtr = &errMsg
 			}
 		}
-		
+
 		// Convert to pointers for model
 		method := c.Request.Method
 		path := c.Request.URL.Path
@@ -84,6 +84,7 @@ func AuditMiddleware(auditService *services.AuditService) gin.HandlerFunc {
 
 		// Create audit log entry
 		auditLog := &models.AuditLog{
+			ID:           uuid.New(), // Generate unique ID for audit log
 			UserID:       &userID,
 			UserEmail:    &userEmailStr,
 			CompanyID:    companyID,
@@ -324,25 +325,25 @@ func buildMetadata(c *gin.Context, requestBody map[string]interface{}) map[strin
 func incrementAuditMetrics(action, resource, userEmail string, success bool, duration int64, method string, statusCode, responseSize int) {
 	// Get role from context (defaulting to "unknown" if not set)
 	role := "unknown"
-	
+
 	// Increment main action counter
 	metrics.IncrementAuditAction(action, resource, role, success)
-	
+
 	// Observe action duration
 	metrics.ObserveAuditActionDuration(action, resource, method, duration)
-	
+
 	// Increment user action counter
 	metrics.IncrementUserAction(userEmail, action, resource)
-	
+
 	// Increment resource access counter
 	metrics.IncrementResourceAccess(resource, action, method)
-	
+
 	// Track HTTP status codes
 	metrics.IncrementHTTPStatusCode(method, resource, statusCode)
-	
+
 	// Observe response size
 	metrics.ObserveResponseSize(method, resource, statusCode, responseSize)
-	
+
 	// Increment error counter if request failed
 	if !success {
 		errorType := "http_error"
@@ -357,13 +358,13 @@ func incrementAuditMetrics(action, resource, userEmail string, success bool, dur
 		} else if statusCode >= 500 {
 			errorType = "server_error"
 		}
-		
+
 		metrics.IncrementAuditError(action, resource, errorType, statusCode)
 	}
-	
+
 	// Detect suspicious activity
 	metrics.DetectSuspiciousActivity(action, resource, statusCode, userEmail)
-	
+
 	// Track authentication events separately
 	if resource == "auth_login" || resource == "auth_logout" {
 		metrics.IncrementAuthenticationEvent(action, success, "0.0.0.0") // IP will be added later

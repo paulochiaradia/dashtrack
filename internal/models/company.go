@@ -62,13 +62,13 @@ type Vehicle struct {
 	CompanyID    uuid.UUID  `json:"company_id" db:"company_id"`
 	TeamID       *uuid.UUID `json:"team_id" db:"team_id"`
 	LicensePlate string     `json:"license_plate" db:"license_plate"`
-	Brand        *string    `json:"brand" db:"brand"`
-	Model        *string    `json:"model" db:"model"`
-	Year         *int       `json:"year" db:"year"`
+	Brand        string     `json:"brand" db:"brand"`
+	Model        string     `json:"model" db:"model"`
+	Year         int        `json:"year" db:"year"`
 	Color        *string    `json:"color" db:"color"`
 	VehicleType  string     `json:"vehicle_type" db:"vehicle_type"`
 	FuelType     string     `json:"fuel_type" db:"fuel_type"`
-	CapacityKg   *float64   `json:"capacity_kg" db:"capacity_kg"`
+	CargoCapacity *float64  `json:"cargo_capacity" db:"cargo_capacity"`
 	DriverID     *uuid.UUID `json:"driver_id" db:"driver_id"`
 	HelperID     *uuid.UUID `json:"helper_id" db:"helper_id"`
 	Status       string     `json:"status" db:"status"`
@@ -173,13 +173,13 @@ type CreateTeamRequest struct {
 type CreateVehicleRequest struct {
 	TeamID       *uuid.UUID `json:"team_id"`
 	LicensePlate string     `json:"license_plate" binding:"required,min=3,max=20"`
-	Brand        *string    `json:"brand"`
-	Model        *string    `json:"model"`
-	Year         *int       `json:"year"`
+	Brand        string     `json:"brand" binding:"required"`
+	Model        string     `json:"model" binding:"required"`
+	Year         int        `json:"year" binding:"required,min=1900,max=2100"`
 	Color        *string    `json:"color"`
 	VehicleType  string     `json:"vehicle_type" binding:"required,oneof=truck van car motorcycle bus"`
 	FuelType     string     `json:"fuel_type" binding:"required,oneof=gasoline diesel electric hybrid cng"`
-	CapacityKg   *float64   `json:"capacity_kg"`
+	CargoCapacity *float64  `json:"cargo_capacity"`
 	DriverID     *uuid.UUID `json:"driver_id"`
 	HelperID     *uuid.UUID `json:"helper_id"`
 }

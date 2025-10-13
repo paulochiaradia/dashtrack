@@ -67,7 +67,7 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	userHandler := handlers.NewUserHandler(userService)
 	sensorHandler := handlers.NewSensorHandler(sensorRepo)
 	companyHandler := handlers.NewCompanyHandler(companyRepo)
-	teamHandler := handlers.NewTeamHandler(teamRepo, userRepo)
+	teamHandler := handlers.NewTeamHandler(teamRepo, userRepo, vehicleRepo)
 	vehicleHandler := handlers.NewVehicleHandler(vehicleRepo, teamRepo)
 	esp32Handler := handlers.NewESP32DeviceHandler(esp32Repo, vehicleRepo)
 	securityHandler := handlers.NewSecurityHandler(tokenService, twoFactorService, auditService)
@@ -106,11 +106,11 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 
 func (r *Router) setupMiddleware() {
 	r.engine.Use(gin.Recovery())
-	
+
 	// Audit middleware - logs all HTTP requests automatically
 	// Skips health and metrics endpoints
 	r.engine.Use(middleware.AuditMiddleware(r.auditService))
-	
+
 	// TODO: Add other middlewares when they are implemented
 	// r.engine.Use(middleware.GinLoggingMiddleware())
 	// r.engine.Use(middleware.CORSMiddleware())
@@ -165,6 +165,8 @@ func (r *Router) setupRoutes() {
 	r.setupCompanyAdminRoutes()
 	r.setupAdminRoutes()
 	r.setupManagerRoutes()
+	r.setupTeamRoutes()    // Team management routes
+	r.setupVehicleRoutes(v1) // Vehicle management routes (Phase 4)
 	r.setupHealthRoutes()
 	r.setupSecurityRoutes()
 	r.setupSessionRoutes()

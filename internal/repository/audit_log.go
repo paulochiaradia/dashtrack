@@ -86,7 +86,7 @@ func (r *AuditLogRepository) Create(ctx context.Context, log *models.AuditLog) e
 }
 
 // GetByID retrieves an audit log by ID
-func (r *AuditLogRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.AuditLog, error){
+func (r *AuditLogRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.AuditLog, error) {
 	query := `
 		SELECT 
 			id, user_id, user_email, company_id, action, resource, resource_id,

@@ -56,18 +56,38 @@ CREATE TABLE IF NOT EXISTS session_tokens (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create audit_logs table (extends auth_logs)
+-- Create audit_logs table (extends auth_logs) - comprehensive version
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    user_id UUID,  -- No FK constraint - allows logging even if user doesn't exist
+    user_email VARCHAR(255),
+    company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    
+    -- Action details
     action VARCHAR(50) NOT NULL,
-    resource VARCHAR(50) NOT NULL,
-    resource_id VARCHAR(100),
-    ip_address INET NOT NULL,
+    resource VARCHAR(100) NOT NULL,
+    resource_id UUID,
+    
+    -- Request context
+    method VARCHAR(10) NOT NULL DEFAULT 'GET',
+    path VARCHAR(500) NOT NULL DEFAULT '/unknown',
+    ip_address VARCHAR(45) NOT NULL,
     user_agent TEXT,
-    details JSONB DEFAULT '{}'::jsonb,
+    
+    -- Data changes
+    changes JSONB DEFAULT '{}'::jsonb,
+    metadata JSONB,
+    
+    -- Result
     success BOOLEAN NOT NULL DEFAULT TRUE,
     error_message TEXT,
+    status_code INTEGER NOT NULL DEFAULT 200,
+    duration_ms BIGINT,
+    
+    -- Distributed tracing
+    trace_id VARCHAR(32),
+    span_id VARCHAR(16),
+    
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -78,8 +98,24 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_events_user_created ON rate_limit_even
 CREATE INDEX IF NOT EXISTS idx_session_tokens_user_id ON session_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_session_tokens_access_token ON session_tokens(access_token_hash);
 CREATE INDEX IF NOT EXISTS idx_session_tokens_refresh_token ON session_tokens(refresh_token_hash);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON audit_logs(user_id, action);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource, created_at);
+
+-- Audit logs indexes
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_company_id ON audit_logs(company_id) WHERE company_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_id ON audit_logs(resource_id) WHERE resource_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_trace_id ON audit_logs(trace_id) WHERE trace_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_method ON audit_logs(method);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_path ON audit_logs(path);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_status_code ON audit_logs(status_code);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action_created ON audit_logs(user_id, action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_created ON audit_logs(resource, resource_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_company_created ON audit_logs(company_id, created_at DESC) WHERE company_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_changes ON audit_logs USING GIN(changes) WHERE changes IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_metadata ON audit_logs USING GIN(metadata) WHERE metadata IS NOT NULL;
 
 -- Insert default rate limit rules
 INSERT INTO rate_limit_rules (name, path, method, max_requests, window_size, user_based) VALUES

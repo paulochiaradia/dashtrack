@@ -49,11 +49,11 @@ func (r *VehicleRepository) Create(ctx context.Context, vehicle *models.Vehicle)
 	query := `
 		INSERT INTO vehicles (
 			id, company_id, team_id, license_plate, brand, model, year, color,
-			vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			created_at, updated_at
 		) VALUES (
 			:id, :company_id, :team_id, :license_plate, :brand, :model, :year, :color,
-			:vehicle_type, :fuel_type, :capacity_kg, :driver_id, :helper_id, :status,
+			:vehicle_type, :fuel_type, :cargo_capacity, :driver_id, :helper_id, :status,
 			:created_at, :updated_at
 		)
 	`
@@ -80,7 +80,7 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id uuid.UUID, companyID
 	var vehicle models.Vehicle
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE id = $1 AND company_id = $2
@@ -110,7 +110,7 @@ func (r *VehicleRepository) GetByLicensePlate(ctx context.Context, licensePlate 
 	var vehicle models.Vehicle
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE license_plate = $1 AND company_id = $2
@@ -141,7 +141,7 @@ func (r *VehicleRepository) GetByCompany(ctx context.Context, companyID uuid.UUI
 	var vehicles []models.Vehicle
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE company_id = $1 AND status != 'deleted'
@@ -171,7 +171,7 @@ func (r *VehicleRepository) GetByTeam(ctx context.Context, teamID uuid.UUID, com
 	var vehicles []models.Vehicle
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE team_id = $1 AND company_id = $2 AND status != 'deleted'
@@ -200,7 +200,7 @@ func (r *VehicleRepository) GetByDriver(ctx context.Context, driverID uuid.UUID,
 	var vehicles []models.Vehicle
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE driver_id = $1 AND company_id = $2 AND status != 'deleted'
@@ -235,7 +235,7 @@ func (r *VehicleRepository) Update(ctx context.Context, vehicle *models.Vehicle)
 			color = :color,
 			vehicle_type = :vehicle_type,
 			fuel_type = :fuel_type,
-			capacity_kg = :capacity_kg,
+			cargo_capacity = :cargo_capacity,
 			driver_id = :driver_id,
 			helper_id = :helper_id,
 			status = :status,
@@ -300,8 +300,8 @@ func (r *VehicleRepository) Delete(ctx context.Context, id uuid.UUID, companyID 
 
 	query := `
 		UPDATE vehicles 
-		SET status = 'deleted', updated_at = NOW() 
-		WHERE id = $1 AND company_id = $2
+		SET deleted_at = NOW(), updated_at = NOW() 
+		WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
 	`
 
 	result, err := r.db.ExecContext(ctx, query, id, companyID)
@@ -447,7 +447,7 @@ func (r *VehicleRepository) Search(ctx context.Context, companyID uuid.UUID, sea
 
 	query := `
 		SELECT id, company_id, team_id, license_plate, brand, model, year, color,
-			   vehicle_type, fuel_type, capacity_kg, driver_id, helper_id, status,
+			   vehicle_type, fuel_type, cargo_capacity, driver_id, helper_id, status,
 			   created_at, updated_at
 		FROM vehicles 
 		WHERE company_id = $1 

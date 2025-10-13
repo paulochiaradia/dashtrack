@@ -152,14 +152,14 @@ func (as *AuditService) LogHTTPRequest(ctx context.Context, auditLog *models.Aud
 			if auditLog.Path != nil {
 				path = *auditLog.Path
 			}
-			
+
 			logger.Error("Failed to store HTTP audit log",
 				zap.Error(err),
 				zap.String("method", method),
 				zap.String("path", path),
 				zap.String("action", auditLog.Action),
 			)
-			
+
 			// Increment error metric
 			metrics.IncrementDatabaseWriteError()
 		} else {
@@ -424,7 +424,7 @@ func (as *AuditService) ExportLogs(ctx context.Context, filter *models.AuditLogF
 // exportToCSV converts audit logs to CSV format
 func exportToCSV(logs []*models.AuditLog) ([]byte, error) {
 	var csv string
-	
+
 	// Header
 	csv += "ID,Timestamp,User ID,User Email,Company ID,Action,Resource,Resource ID,Method,Path,IP Address,Success,Status Code,Duration (ms),Trace ID\n"
 

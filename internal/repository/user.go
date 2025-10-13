@@ -192,7 +192,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, sql.ErrNoRows
 		}
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to get user by email: %w", err)

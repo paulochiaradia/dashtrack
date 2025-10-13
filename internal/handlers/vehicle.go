@@ -61,19 +61,19 @@ func (h *VehicleHandler) CreateVehicle(c *gin.Context) {
 	}
 
 	vehicle := &models.Vehicle{
-		CompanyID:    *companyID,
-		LicensePlate: req.LicensePlate,
-		Brand:        req.Brand,
-		Model:        req.Model,
-		Year:         req.Year,
-		Color:        req.Color,
-		VehicleType:  req.VehicleType,
-		FuelType:     req.FuelType,
-		CapacityKg:   req.CapacityKg,
-		DriverID:     req.DriverID,
-		HelperID:     req.HelperID,
-		TeamID:       req.TeamID,
-		Status:       "active", // Default status
+		CompanyID:     *companyID,
+		LicensePlate:  req.LicensePlate,
+		Brand:         req.Brand,
+		Model:         req.Model,
+		Year:          req.Year,
+		Color:         req.Color,
+		VehicleType:   req.VehicleType,
+		FuelType:      req.FuelType,
+		CargoCapacity: req.CargoCapacity,
+		DriverID:      req.DriverID,
+		HelperID:      req.HelperID,
+		TeamID:        req.TeamID,
+		Status:        "active", // Default status
 	}
 
 	err = h.vehicleRepo.Create(ctx, vehicle)
@@ -244,7 +244,7 @@ func (h *VehicleHandler) UpdateVehicle(c *gin.Context) {
 	vehicle.Color = req.Color
 	vehicle.VehicleType = req.VehicleType
 	vehicle.FuelType = req.FuelType
-	vehicle.CapacityKg = req.CapacityKg
+	vehicle.CargoCapacity = req.CargoCapacity
 	vehicle.DriverID = req.DriverID
 	vehicle.HelperID = req.HelperID
 	vehicle.TeamID = req.TeamID
@@ -405,4 +405,114 @@ func (h *VehicleHandler) AssignVehicleToTeam(c *gin.Context) {
 	)
 
 	utils.SuccessResponse(c, http.StatusOK, "Vehicle assigned to team successfully", vehicle)
+}
+
+// AssignUsers assigns driver and helper to a vehicle
+func (h *VehicleHandler) AssignUsers(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "VehicleHandler.AssignUsers")
+	defer span.End()
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	vehicleIDStr := c.Param("id")
+	vehicleID, err := uuid.Parse(vehicleIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid vehicle ID")
+		return
+	}
+
+	var req models.UpdateVehicleAssignmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
+		utils.ValidationErrorResponse(c, err)
+		return
+	}
+
+	// Get existing vehicle
+	vehicle, err := h.vehicleRepo.GetByID(ctx, vehicleID, *companyID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve vehicle")
+		return
+	}
+
+	if vehicle == nil {
+		utils.NotFoundResponse(c, "Vehicle not found")
+		return
+	}
+
+	// Update assignments
+	err = h.vehicleRepo.UpdateAssignment(ctx, vehicleID, *companyID, req.DriverID, req.HelperID, vehicle.TeamID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to update vehicle assignment")
+		return
+	}
+
+	// Fetch updated vehicle
+	vehicle, _ = h.vehicleRepo.GetByID(ctx, vehicleID, *companyID)
+
+	span.SetAttributes(
+		attribute.String("vehicle.id", vehicleID.String()),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Vehicle assignment updated successfully", vehicle)
+}
+
+// GetMyVehicle retrieves the vehicle assigned to the current user
+func (h *VehicleHandler) GetMyVehicle(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "VehicleHandler.GetMyVehicle")
+	defer span.End()
+
+	// Get user ID from context
+	userIDStr := c.GetString("user_id")
+	if userIDStr == "" {
+		utils.UnauthorizedResponse(c, "User not authenticated")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid user ID")
+		return
+	}
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	// Get vehicles where user is driver or helper
+	vehicles, err := h.vehicleRepo.GetByCompany(ctx, *companyID, 1000, 0) // Get up to 1000 vehicles
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve vehicles")
+		return
+	}
+
+	// Filter vehicles assigned to this user
+	var myVehicles []models.Vehicle
+	for _, vehicle := range vehicles {
+		if (vehicle.DriverID != nil && *vehicle.DriverID == userID) ||
+			(vehicle.HelperID != nil && *vehicle.HelperID == userID) {
+			myVehicles = append(myVehicles, vehicle)
+		}
+	}
+
+	span.SetAttributes(
+		attribute.String("user.id", userID.String()),
+		attribute.Int("vehicle.count", len(myVehicles)),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "My vehicles retrieved successfully", gin.H{
+		"vehicles": myVehicles,
+		"count":    len(myVehicles),
+	})
 }

@@ -398,3 +398,15 @@ func ExtractUserContext(c *gin.Context) (*models.UserContext, bool) {
 	userCtx, ok := userContext.(*models.UserContext)
 	return userCtx, ok
 }
+
+// GetUserIDFromContext retrieves user ID from context
+func GetUserIDFromContext(c *gin.Context) (*uuid.UUID, error) {
+	// Try to get from user context
+	if userContextInterface, exists := c.Get("userContext"); exists {
+		if userContext, ok := userContextInterface.(*models.UserContext); ok {
+			return &userContext.UserID, nil
+		}
+	}
+
+	return nil, nil
+}

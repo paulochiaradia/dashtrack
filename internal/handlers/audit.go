@@ -289,11 +289,11 @@ func (h *AuditHandler) GetResourceLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"logs":      logs,
-		"total":     total,
-		"resource":  resourceType,
-		"limit":     filter.Limit,
-		"offset":    filter.Offset,
+		"logs":     logs,
+		"total":    total,
+		"resource": resourceType,
+		"limit":    filter.Limit,
+		"offset":   filter.Offset,
 	})
 }
 

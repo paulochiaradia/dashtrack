@@ -163,8 +163,8 @@ func (r *TeamRepository) Delete(ctx context.Context, id uuid.UUID, companyID uui
 
 	query := `
 		UPDATE teams 
-		SET status = 'deleted', updated_at = NOW() 
-		WHERE id = $1 AND company_id = $2
+		SET deleted_at = NOW(), updated_at = NOW() 
+		WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
 	`
 
 	result, err := r.db.ExecContext(ctx, query, id, companyID)

@@ -79,31 +79,43 @@
 
 ---
 
-### ✅ **FASE 4: Vehicle Management (Alta Prioridade)** - Estimativa: 4-5h
+### ✅ **FASE 4: Vehicle Management (Alta Prioridade)** - **COMPLETO** ✅
 
 **Objetivo**: Gerenciamento completo de veículos
 
-**Status Atual**:
+**Status:** ✅ **IMPLEMENTADO E TESTADO (October 13, 2025)**
+
+**Implementação Completa**:
 - ✅ Model existe: `Vehicle`
-- ✅ Repository existe: `VehicleRepository`
-- ✅ Handler existe: `VehicleHandler` com métodos básicos
-- ❌ Falta: Rotas completas para todos os níveis de acesso
+- ✅ Repository completo: `VehicleRepository` (com soft delete corrigido)
+- ✅ Handler completo: `VehicleHandler` (7 métodos implementados)
+- ✅ Rotas: `internal/routes/vehicle.go` (4 níveis de acesso)
+- ✅ Testes: 7/7 endpoints funcionando (100% success rate)
 
-**Endpoints a Implementar**:
-- `GET /api/v1/vehicles` - Listar veículos
-- `POST /api/v1/vehicles` - Criar veículo
-- `GET /api/v1/vehicles/:id` - Detalhes do veículo
-- `PUT /api/v1/vehicles/:id` - Atualizar veículo
-- `DELETE /api/v1/vehicles/:id` - Deletar veículo
-- `GET /api/v1/vehicles/:id/history` - Histórico do veículo
-- `GET /api/v1/vehicles/:id/sensors` - Sensores do veículo
-- `POST /api/v1/vehicles/:id/assign-team` - Atribuir a time
-- `GET /api/v1/vehicles/stats` - Estatísticas de veículos
+**Endpoints Implementados**:
+- ✅ `POST /api/v1/company-admin/vehicles` - Criar veículo
+- ✅ `GET /api/v1/company-admin/vehicles` - Listar veículos
+- ✅ `GET /api/v1/company-admin/vehicles/:id` - Detalhes do veículo
+- ✅ `PUT /api/v1/company-admin/vehicles/:id` - Atualizar veículo
+- ✅ `DELETE /api/v1/company-admin/vehicles/:id` - Soft delete veículo
+- ✅ `PUT /api/v1/company-admin/vehicles/:id/assign` - Atribuir driver/helper
+- ✅ `GET /api/v1/vehicles/my-vehicle` - Veículo do usuário (driver/helper)
 
-**Regras de Negócio**:
-- Company Admin pode gerenciar veículos da sua empresa
-- Managers podem visualizar veículos
-- Drivers podem ver apenas veículos atribuídos
+**Regras de Negócio Implementadas**:
+- ✅ Company Admin pode gerenciar veículos da sua empresa (CRUD completo)
+- ✅ Admin pode visualizar e atribuir usuários a veículos
+- ✅ Managers podem visualizar veículos (filtrados por times)
+- ✅ Drivers/Helpers podem ver apenas veículos atribuídos a eles
+- ✅ Soft delete usando `deleted_at` (não muda status)
+- ✅ Validação de campos obrigatórios (brand, model, year, etc)
+
+**Correções Aplicadas**:
+- ✅ Soft delete corrigido: usa `deleted_at` em vez de `status='deleted'`
+- ✅ Rotas com `RequireRole()` correto (um role por vez)
+- ✅ Handlers `AssignUsers` e `GetMyVehicle` implementados
+- ✅ Paginação com limit/offset no `GetByCompany()`
+
+**Documentação**: Ver [VEHICLE_MANAGEMENT_API.md](./VEHICLE_MANAGEMENT_API.md)
 
 ---
 

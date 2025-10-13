@@ -71,6 +71,7 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 		c.Next()
 	}
 } // RequireRole middleware ensures the user has the specified role
+// Master role has universal access to all routes
 func (m *GinAuthMiddleware) RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, exists := c.Get("role_name")
@@ -80,7 +81,15 @@ func (m *GinAuthMiddleware) RequireRole(role string) gin.HandlerFunc {
 			return
 		}
 
-		if userRole.(string) != role {
+		userRoleStr := userRole.(string)
+
+		// Master role has universal access
+		if userRoleStr == "master" {
+			c.Next()
+			return
+		}
+
+		if userRoleStr != role {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
 			c.Abort()
 			return
@@ -91,6 +100,7 @@ func (m *GinAuthMiddleware) RequireRole(role string) gin.HandlerFunc {
 }
 
 // RequireAnyRole middleware ensures the user has at least one of the specified roles
+// Master role has universal access to all routes
 func (m *GinAuthMiddleware) RequireAnyRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, exists := c.Get("role_name")
@@ -101,6 +111,13 @@ func (m *GinAuthMiddleware) RequireAnyRole(roles ...string) gin.HandlerFunc {
 		}
 
 		userRoleStr := userRole.(string)
+
+		// Master role has universal access
+		if userRoleStr == "master" {
+			c.Next()
+			return
+		}
+
 		for _, role := range roles {
 			if userRoleStr == role {
 				c.Next()

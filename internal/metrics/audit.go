@@ -167,7 +167,7 @@ func IncrementAuditAction(action, resource, role string, success bool) {
 func ObserveAuditActionDuration(action, resource, method string, durationMs int64) {
 	durationSec := float64(durationMs) / 1000.0
 	AuditActionDuration.WithLabelValues(action, resource, method).Observe(durationSec)
-	
+
 	// Track slow requests (> 1 second)
 	if durationSec > 1.0 {
 		AuditSlowRequests.WithLabelValues(method, resource, "1s").Inc()

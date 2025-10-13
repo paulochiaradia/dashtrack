@@ -19,7 +19,8 @@ func NewDatabase(dsn string) *sql.DB {
 		log.Fatalf("could not ping the database: %v", err)
 	}
 
-	runMigrations(db)
+	// Migrations are handled by docker-entrypoint.sh using golang-migrate CLI
+	// runMigrations(db)
 
 	return db
 }
