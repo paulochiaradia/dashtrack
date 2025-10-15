@@ -212,7 +212,7 @@ func (uc *UserContext) CanManageTeam() bool {
 // AssignTeamMemberRequest represents request to assign user to team
 type AssignTeamMemberRequest struct {
 	UserID     uuid.UUID `json:"user_id" binding:"required"`
-	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=driver helper supervisor"`
+	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor"`
 }
 
 // CreateCompanyUserRequest represents request to create a company user

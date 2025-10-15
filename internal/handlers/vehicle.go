@@ -516,3 +516,74 @@ func (h *VehicleHandler) GetMyVehicle(c *gin.Context) {
 		"count":    len(myVehicles),
 	})
 }
+
+// ============================================================================
+// VEHICLE ASSIGNMENT HISTORY
+// ============================================================================
+
+// GetVehicleAssignmentHistory retrieves the assignment history for a vehicle
+func (h *VehicleHandler) GetVehicleAssignmentHistory(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "VehicleHandler.GetVehicleAssignmentHistory")
+	defer span.End()
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	// Parse vehicle ID
+	vehicleIDStr := c.Param("id")
+	vehicleID, err := uuid.Parse(vehicleIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid vehicle ID")
+		return
+	}
+
+	// Parse limit parameter (optional)
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 500 {
+		limit = 50 // Default to 50 if invalid
+	}
+
+	// Verify vehicle exists and belongs to company
+	vehicle, err := h.vehicleRepo.GetByID(ctx, vehicleID, *companyID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve vehicle")
+		return
+	}
+
+	if vehicle == nil {
+		utils.NotFoundResponse(c, "Vehicle not found")
+		return
+	}
+
+	// Get assignment history with details
+	history, err := h.vehicleRepo.GetAssignmentHistoryWithDetails(ctx, vehicleID, *companyID, limit)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve assignment history")
+		return
+	}
+
+	span.SetAttributes(
+		attribute.String("vehicle.id", vehicleID.String()),
+		attribute.Int("history.count", len(history)),
+		attribute.Int("history.limit", limit),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Vehicle assignment history retrieved successfully", gin.H{
+		"vehicle": gin.H{
+			"id":            vehicle.ID,
+			"license_plate": vehicle.LicensePlate,
+			"brand":         vehicle.Brand,
+			"model":         vehicle.Model,
+		},
+		"history": history,
+		"count":   len(history),
+		"limit":   limit,
+	})
+}

@@ -56,6 +56,30 @@ type TeamMember struct {
 	Team *Team `json:"team,omitempty"`
 }
 
+// TeamMemberHistory tracks changes to team memberships
+type TeamMemberHistory struct {
+	ID                 uuid.UUID  `json:"id" db:"id"`
+	TeamID             uuid.UUID  `json:"team_id" db:"team_id"`
+	UserID             uuid.UUID  `json:"user_id" db:"user_id"`
+	CompanyID          uuid.UUID  `json:"company_id" db:"company_id"`
+	PreviousRoleInTeam *string    `json:"previous_role_in_team" db:"previous_role_in_team"`
+	NewRoleInTeam      *string    `json:"new_role_in_team" db:"new_role_in_team"`
+	ChangeType         string     `json:"change_type" db:"change_type"`
+	PreviousTeamID     *uuid.UUID `json:"previous_team_id" db:"previous_team_id"`
+	NewTeamID          *uuid.UUID `json:"new_team_id" db:"new_team_id"`
+	ChangedByUserID    *uuid.UUID `json:"changed_by_user_id" db:"changed_by_user_id"`
+	ChangeReason       *string    `json:"change_reason" db:"change_reason"`
+	ChangedAt          time.Time  `json:"changed_at" db:"changed_at"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+
+	// Populated fields
+	Team          *Team `json:"team,omitempty"`
+	User          *User `json:"user,omitempty"`
+	PreviousTeam  *Team `json:"previous_team,omitempty"`
+	NewTeam       *Team `json:"new_team,omitempty"`
+	ChangedByUser *User `json:"changed_by_user,omitempty"`
+}
+
 // Vehicle represents a company vehicle with IoT sensors
 type Vehicle struct {
 	ID            uuid.UUID  `json:"id" db:"id"`
@@ -82,6 +106,34 @@ type Vehicle struct {
 	Helper       *User         `json:"helper,omitempty"`
 	Sensors      []Sensor      `json:"sensors,omitempty"`
 	ESP32Devices []ESP32Device `json:"esp32_devices,omitempty"`
+}
+
+// VehicleAssignmentHistory tracks changes to vehicle assignments
+type VehicleAssignmentHistory struct {
+	ID               uuid.UUID  `json:"id" db:"id"`
+	VehicleID        uuid.UUID  `json:"vehicle_id" db:"vehicle_id"`
+	CompanyID        uuid.UUID  `json:"company_id" db:"company_id"`
+	PreviousDriverID *uuid.UUID `json:"previous_driver_id" db:"previous_driver_id"`
+	PreviousHelperID *uuid.UUID `json:"previous_helper_id" db:"previous_helper_id"`
+	PreviousTeamID   *uuid.UUID `json:"previous_team_id" db:"previous_team_id"`
+	NewDriverID      *uuid.UUID `json:"new_driver_id" db:"new_driver_id"`
+	NewHelperID      *uuid.UUID `json:"new_helper_id" db:"new_helper_id"`
+	NewTeamID        *uuid.UUID `json:"new_team_id" db:"new_team_id"`
+	ChangeType       string     `json:"change_type" db:"change_type"`
+	ChangedByUserID  *uuid.UUID `json:"changed_by_user_id" db:"changed_by_user_id"`
+	ChangeReason     *string    `json:"change_reason" db:"change_reason"`
+	ChangedAt        time.Time  `json:"changed_at" db:"changed_at"`
+	CreatedAt        time.Time  `json:"created_at" db:"created_at"`
+
+	// Populated fields
+	Vehicle        *Vehicle `json:"vehicle,omitempty"`
+	PreviousDriver *User    `json:"previous_driver,omitempty"`
+	PreviousHelper *User    `json:"previous_helper,omitempty"`
+	PreviousTeam   *Team    `json:"previous_team,omitempty"`
+	NewDriver      *User    `json:"new_driver,omitempty"`
+	NewHelper      *User    `json:"new_helper,omitempty"`
+	NewTeam        *Team    `json:"new_team,omitempty"`
+	ChangedByUser  *User    `json:"changed_by_user,omitempty"`
 }
 
 // ESP32Device represents an ESP32 IoT device
@@ -167,6 +219,12 @@ type CreateTeamRequest struct {
 	Name        string     `json:"name" binding:"required,min=2,max=255"`
 	Description *string    `json:"description"`
 	ManagerID   *uuid.UUID `json:"manager_id"`
+}
+
+// TransferTeamMemberRequest represents request to transfer a member to another team
+type TransferTeamMemberRequest struct {
+	FromTeamID uuid.UUID `json:"from_team_id" binding:"required"`
+	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor"`
 }
 
 // CreateVehicleRequest represents request to create a new vehicle

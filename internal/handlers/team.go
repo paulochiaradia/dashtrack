@@ -864,3 +864,242 @@ func (h *TeamHandler) UnassignVehicleFromTeam(c *gin.Context) {
 		"vehicle_id": vehicleID,
 	})
 }
+
+// ============================================================================
+// TEAM MEMBER TRANSFER
+// ============================================================================
+
+// TransferMemberToTeam transfers a user from one team to another
+func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "TeamHandler.TransferMemberToTeam")
+	defer span.End()
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	teamIDStr := c.Param("id")
+	newTeamID, err := uuid.Parse(teamIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid team ID")
+		return
+	}
+
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid user ID")
+		return
+	}
+
+	var req models.TransferTeamMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
+		utils.ValidationErrorResponse(c, err)
+		return
+	}
+
+	// Verify both teams exist and belong to company
+	oldTeam, err := h.teamRepo.GetByID(ctx, req.FromTeamID, *companyID)
+	if err != nil || oldTeam == nil {
+		utils.BadRequestResponse(c, "Source team not found")
+		return
+	}
+
+	newTeam, err := h.teamRepo.GetByID(ctx, newTeamID, *companyID)
+	if err != nil || newTeam == nil {
+		utils.NotFoundResponse(c, "Destination team not found")
+		return
+	}
+
+	// Check if user is member of source team
+	exists, err := h.teamRepo.CheckMemberExists(ctx, req.FromTeamID, userID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to check member existence")
+		return
+	}
+
+	if !exists {
+		utils.BadRequestResponse(c, "User is not a member of the source team")
+		return
+	}
+
+	// Check if user is already member of destination team
+	alreadyExists, err := h.teamRepo.CheckMemberExists(ctx, newTeamID, userID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to check destination team membership")
+		return
+	}
+
+	if alreadyExists {
+		utils.BadRequestResponse(c, "User is already a member of the destination team")
+		return
+	}
+
+	// Remove from old team
+	err = h.teamRepo.RemoveMember(ctx, req.FromTeamID, userID)
+	if err != nil {
+		span.RecordError(err)
+		logger.Error("Failed to remove member from source team", zap.Error(err))
+		utils.InternalServerErrorResponse(c, "Failed to transfer member")
+		return
+	}
+
+	// Add to new team
+	teamMember := &models.TeamMember{
+		TeamID:     newTeamID,
+		UserID:     userID,
+		RoleInTeam: req.RoleInTeam,
+	}
+
+	err = h.teamRepo.AddMember(ctx, teamMember)
+	if err != nil {
+		span.RecordError(err)
+		logger.Error("Failed to add member to destination team", zap.Error(err))
+		// Try to rollback by adding back to old team
+		_ = h.teamRepo.AddMember(ctx, &models.TeamMember{
+			TeamID:     req.FromTeamID,
+			UserID:     userID,
+			RoleInTeam: req.RoleInTeam,
+		})
+		utils.InternalServerErrorResponse(c, "Failed to transfer member")
+		return
+	}
+
+	span.SetAttributes(
+		attribute.String("from_team.id", req.FromTeamID.String()),
+		attribute.String("to_team.id", newTeamID.String()),
+		attribute.String("user.id", userID.String()),
+		attribute.String("role", req.RoleInTeam),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Team member transferred successfully", gin.H{
+		"from_team_id": req.FromTeamID,
+		"to_team_id":   newTeamID,
+		"user_id":      userID,
+		"role":         req.RoleInTeam,
+	})
+}
+
+// ============================================================================
+// TEAM MEMBER HISTORY
+// ============================================================================
+
+// GetTeamMemberHistory retrieves the membership history for a team
+func (h *TeamHandler) GetTeamMemberHistory(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "TeamHandler.GetTeamMemberHistory")
+	defer span.End()
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	// Parse team ID
+	teamIDStr := c.Param("id")
+	teamID, err := uuid.Parse(teamIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid team ID")
+		return
+	}
+
+	// Parse limit parameter (optional)
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 500 {
+		limit = 50 // Default to 50 if invalid
+	}
+
+	// Verify team exists and belongs to company
+	team, err := h.teamRepo.GetByID(ctx, teamID, *companyID)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve team")
+		return
+	}
+
+	if team == nil {
+		utils.NotFoundResponse(c, "Team not found")
+		return
+	}
+
+	// Get member history with details
+	history, err := h.teamRepo.GetMemberHistoryWithDetails(ctx, teamID, *companyID, limit)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve member history")
+		return
+	}
+
+	span.SetAttributes(
+		attribute.String("team.id", teamID.String()),
+		attribute.Int("history.count", len(history)),
+		attribute.Int("history.limit", limit),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Team member history retrieved successfully", gin.H{
+		"team": gin.H{
+			"id":   team.ID,
+			"name": team.Name,
+		},
+		"history": history,
+		"count":   len(history),
+		"limit":   limit,
+	})
+}
+
+// GetUserTeamHistory retrieves the team membership history for a specific user
+func (h *TeamHandler) GetUserTeamHistory(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "TeamHandler.GetUserTeamHistory")
+	defer span.End()
+
+	// Get company ID from context
+	companyID, err := middleware.GetCompanyIDFromContext(c)
+	if err != nil || companyID == nil {
+		utils.BadRequestResponse(c, "Company context required")
+		return
+	}
+
+	// Parse user ID
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		utils.BadRequestResponse(c, "Invalid user ID")
+		return
+	}
+
+	// Parse limit parameter (optional)
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 500 {
+		limit = 50
+	}
+
+	// Get user team history with details
+	history, err := h.teamRepo.GetUserTeamHistoryWithDetails(ctx, userID, *companyID, limit)
+	if err != nil {
+		span.RecordError(err)
+		utils.InternalServerErrorResponse(c, "Failed to retrieve user team history")
+		return
+	}
+
+	span.SetAttributes(
+		attribute.String("user.id", userID.String()),
+		attribute.Int("history.count", len(history)),
+		attribute.Int("history.limit", limit),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "User team history retrieved successfully", gin.H{
+		"user_id": userID,
+		"history": history,
+		"count":   len(history),
+		"limit":   limit,
+	})
+}

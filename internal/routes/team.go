@@ -18,10 +18,11 @@ func (r *Router) setupTeamRoutes() {
 	companyAdmin.DELETE("/:id", r.teamHandler.DeleteTeam) // Delete team
 
 	// Member Management
-	companyAdmin.GET("/:id/members", r.teamHandler.GetMembers)                    // List team members
-	companyAdmin.POST("/:id/members", r.teamHandler.AddMember)                    // Add member to team
-	companyAdmin.DELETE("/:id/members/:userId", r.teamHandler.RemoveMember)       // Remove member from team
-	companyAdmin.PUT("/:id/members/:userId/role", r.teamHandler.UpdateMemberRole) // Update member role
+	companyAdmin.GET("/:id/members", r.teamHandler.GetMembers)                             // List team members
+	companyAdmin.POST("/:id/members", r.teamHandler.AddMember)                             // Add member to team
+	companyAdmin.DELETE("/:id/members/:userId", r.teamHandler.RemoveMember)                // Remove member from team
+	companyAdmin.PUT("/:id/members/:userId/role", r.teamHandler.UpdateMemberRole)          // Update member role
+	companyAdmin.POST("/:id/members/:userId/transfer", r.teamHandler.TransferMemberToTeam) // Transfer member to another team
 
 	// Statistics & Analytics
 	companyAdmin.GET("/:id/stats", r.teamHandler.GetTeamStats)       // Team statistics
@@ -30,6 +31,10 @@ func (r *Router) setupTeamRoutes() {
 	// Vehicle Assignment
 	companyAdmin.POST("/:id/vehicles/:vehicleId", r.teamHandler.AssignVehicleToTeam)       // Assign vehicle to team
 	companyAdmin.DELETE("/:id/vehicles/:vehicleId", r.teamHandler.UnassignVehicleFromTeam) // Unassign vehicle from team
+
+	// History
+	companyAdmin.GET("/:id/member-history", r.teamHandler.GetTeamMemberHistory)       // Get team member history
+	companyAdmin.GET("/users/:userId/team-history", r.teamHandler.GetUserTeamHistory) // Get user team membership history
 
 	// ==================================================
 	// ADMIN ROUTES - Team Management within Company
@@ -43,6 +48,10 @@ func (r *Router) setupTeamRoutes() {
 	admin.GET("/:id", r.teamHandler.GetTeam)            // Get team details
 	admin.GET("/:id/members", r.teamHandler.GetMembers) // List team members
 	admin.GET("/:id/stats", r.teamHandler.GetTeamStats) // Team statistics
+
+	// History
+	admin.GET("/:id/member-history", r.teamHandler.GetTeamMemberHistory)       // Get team member history
+	admin.GET("/users/:userId/team-history", r.teamHandler.GetUserTeamHistory) // Get user team membership history
 
 	// ==================================================
 	// MANAGER ROUTES - View Teams and Members

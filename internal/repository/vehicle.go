@@ -257,7 +257,7 @@ func (r *VehicleRepository) Update(ctx context.Context, vehicle *models.Vehicle)
 	return nil
 }
 
-// UpdateAssignment updates vehicle assignments (driver, helper, team)
+// UpdateAssignment updates vehicle assignments (driver, helper, team) and logs the change
 func (r *VehicleRepository) UpdateAssignment(ctx context.Context, vehicleID, companyID uuid.UUID, driverID, helperID, teamID *uuid.UUID) error {
 	ctx, span := r.tracer.Start(ctx, "VehicleRepository.UpdateAssignment",
 		trace.WithAttributes(
@@ -266,6 +266,17 @@ func (r *VehicleRepository) UpdateAssignment(ctx context.Context, vehicleID, com
 		))
 	defer span.End()
 
+	// Get current vehicle state before update
+	var currentVehicle models.Vehicle
+	err := r.db.GetContext(ctx, &currentVehicle,
+		`SELECT id, driver_id, helper_id, team_id FROM vehicles WHERE id = $1 AND company_id = $2`,
+		vehicleID, companyID)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to get current vehicle state: %w", err)
+	}
+
+	// Update vehicle assignments
 	query := `
 		UPDATE vehicles SET
 			driver_id = $1,
@@ -286,7 +297,87 @@ func (r *VehicleRepository) UpdateAssignment(ctx context.Context, vehicleID, com
 		return fmt.Errorf("vehicle not found or not authorized")
 	}
 
+	// Determine change type and log if there was a change
+	changeType := r.determineChangeType(currentVehicle.DriverID, currentVehicle.HelperID, currentVehicle.TeamID, driverID, helperID, teamID)
+
+	if changeType != "" {
+		// Get user ID from context if available (for changed_by_user_id)
+		// Note: This requires the userID to be passed through context
+		// For now, we'll leave it nil, but handlers should set it
+
+		history := &models.VehicleAssignmentHistory{
+			VehicleID:        vehicleID,
+			CompanyID:        companyID,
+			PreviousDriverID: currentVehicle.DriverID,
+			PreviousHelperID: currentVehicle.HelperID,
+			PreviousTeamID:   currentVehicle.TeamID,
+			NewDriverID:      driverID,
+			NewHelperID:      helperID,
+			NewTeamID:        teamID,
+			ChangeType:       changeType,
+			ChangedByUserID:  nil, // Should be set by handler
+		}
+
+		// Log the change (non-critical, don't fail the update if logging fails)
+		if err := r.LogAssignmentChange(ctx, history); err != nil {
+			// Log error but don't fail the update
+			span.RecordError(fmt.Errorf("failed to log assignment change: %w", err))
+		}
+	}
+
 	return nil
+}
+
+// determineChangeType determines what type of change occurred
+func (r *VehicleRepository) determineChangeType(oldDriverID, oldHelperID, oldTeamID, newDriverID, newHelperID, newTeamID *uuid.UUID) string {
+	driverChanged := !uuidPtrEqual(oldDriverID, newDriverID)
+	helperChanged := !uuidPtrEqual(oldHelperID, newHelperID)
+	teamChanged := !uuidPtrEqual(oldTeamID, newTeamID)
+
+	changesCount := 0
+	if driverChanged {
+		changesCount++
+	}
+	if helperChanged {
+		changesCount++
+	}
+	if teamChanged {
+		changesCount++
+	}
+
+	// No changes
+	if changesCount == 0 {
+		return ""
+	}
+
+	// Multiple changes
+	if changesCount > 1 {
+		return "full_assignment"
+	}
+
+	// Single change
+	if driverChanged {
+		return "driver"
+	}
+	if helperChanged {
+		return "helper"
+	}
+	if teamChanged {
+		return "team"
+	}
+
+	return ""
+}
+
+// uuidPtrEqual compares two UUID pointers for equality
+func uuidPtrEqual(a, b *uuid.UUID) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 // Delete soft deletes a vehicle
@@ -492,4 +583,174 @@ func (r *VehicleRepository) CheckLicensePlateExists(ctx context.Context, license
 	}
 
 	return count > 0, nil
+}
+
+// ============================================================================
+// VEHICLE ASSIGNMENT HISTORY METHODS
+// ============================================================================
+
+// LogAssignmentChange logs a change to vehicle assignment (driver, helper, or team)
+func (r *VehicleRepository) LogAssignmentChange(ctx context.Context, history *models.VehicleAssignmentHistory) error {
+	ctx, span := r.tracer.Start(ctx, "VehicleRepository.LogAssignmentChange",
+		trace.WithAttributes(
+			attribute.String("vehicle.id", history.VehicleID.String()),
+			attribute.String("change.type", history.ChangeType),
+		))
+	defer span.End()
+
+	history.ID = uuid.New()
+	history.ChangedAt = time.Now()
+	history.CreatedAt = time.Now()
+
+	query := `
+		INSERT INTO vehicle_assignment_history (
+			id, vehicle_id, company_id, 
+			previous_driver_id, previous_helper_id, previous_team_id,
+			new_driver_id, new_helper_id, new_team_id,
+			change_type, changed_by_user_id, change_reason,
+			changed_at, created_at
+		) VALUES (
+			:id, :vehicle_id, :company_id,
+			:previous_driver_id, :previous_helper_id, :previous_team_id,
+			:new_driver_id, :new_helper_id, :new_team_id,
+			:change_type, :changed_by_user_id, :change_reason,
+			:changed_at, :created_at
+		)
+	`
+
+	_, err := r.db.NamedExecContext(ctx, query, history)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to log assignment change: %w", err)
+	}
+
+	return nil
+}
+
+// GetAssignmentHistory retrieves assignment history for a vehicle
+func (r *VehicleRepository) GetAssignmentHistory(ctx context.Context, vehicleID, companyID uuid.UUID, limit int) ([]models.VehicleAssignmentHistory, error) {
+	ctx, span := r.tracer.Start(ctx, "VehicleRepository.GetAssignmentHistory",
+		trace.WithAttributes(
+			attribute.String("vehicle.id", vehicleID.String()),
+			attribute.Int("limit", limit),
+		))
+	defer span.End()
+
+	if limit == 0 {
+		limit = 50 // Default limit
+	}
+
+	query := `
+		SELECT 
+			h.id, h.vehicle_id, h.company_id,
+			h.previous_driver_id, h.previous_helper_id, h.previous_team_id,
+			h.new_driver_id, h.new_helper_id, h.new_team_id,
+			h.change_type, h.changed_by_user_id, h.change_reason,
+			h.changed_at, h.created_at
+		FROM vehicle_assignment_history h
+		WHERE h.vehicle_id = $1 AND h.company_id = $2
+		ORDER BY h.changed_at DESC
+		LIMIT $3
+	`
+
+	var history []models.VehicleAssignmentHistory
+	err := r.db.SelectContext(ctx, &history, query, vehicleID, companyID, limit)
+	if err != nil && err != sql.ErrNoRows {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to get assignment history: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("history.count", len(history)))
+
+	return history, nil
+}
+
+// GetAssignmentHistoryWithDetails retrieves assignment history with populated user/team details
+func (r *VehicleRepository) GetAssignmentHistoryWithDetails(ctx context.Context, vehicleID, companyID uuid.UUID, limit int) ([]models.VehicleAssignmentHistory, error) {
+	ctx, span := r.tracer.Start(ctx, "VehicleRepository.GetAssignmentHistoryWithDetails",
+		trace.WithAttributes(
+			attribute.String("vehicle.id", vehicleID.String()),
+			attribute.Int("limit", limit),
+		))
+	defer span.End()
+
+	if limit == 0 {
+		limit = 50
+	}
+
+	// Get history first
+	history, err := r.GetAssignmentHistory(ctx, vehicleID, companyID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate user and team details for each history entry
+	for i := range history {
+		entry := &history[i]
+
+		// Load previous driver
+		if entry.PreviousDriverID != nil {
+			var driver models.User
+			err := r.db.GetContext(ctx, &driver, `SELECT id, name, email, role FROM users WHERE id = $1`, entry.PreviousDriverID)
+			if err == nil {
+				entry.PreviousDriver = &driver
+			}
+		}
+
+		// Load previous helper
+		if entry.PreviousHelperID != nil {
+			var helper models.User
+			err := r.db.GetContext(ctx, &helper, `SELECT id, name, email, role FROM users WHERE id = $1`, entry.PreviousHelperID)
+			if err == nil {
+				entry.PreviousHelper = &helper
+			}
+		}
+
+		// Load previous team
+		if entry.PreviousTeamID != nil {
+			var team models.Team
+			err := r.db.GetContext(ctx, &team, `SELECT id, name, company_id FROM teams WHERE id = $1`, entry.PreviousTeamID)
+			if err == nil {
+				entry.PreviousTeam = &team
+			}
+		}
+
+		// Load new driver
+		if entry.NewDriverID != nil {
+			var driver models.User
+			err := r.db.GetContext(ctx, &driver, `SELECT id, name, email, role FROM users WHERE id = $1`, entry.NewDriverID)
+			if err == nil {
+				entry.NewDriver = &driver
+			}
+		}
+
+		// Load new helper
+		if entry.NewHelperID != nil {
+			var helper models.User
+			err := r.db.GetContext(ctx, &helper, `SELECT id, name, email, role FROM users WHERE id = $1`, entry.NewHelperID)
+			if err == nil {
+				entry.NewHelper = &helper
+			}
+		}
+
+		// Load new team
+		if entry.NewTeamID != nil {
+			var team models.Team
+			err := r.db.GetContext(ctx, &team, `SELECT id, name, company_id FROM teams WHERE id = $1`, entry.NewTeamID)
+			if err == nil {
+				entry.NewTeam = &team
+			}
+		}
+
+		// Load changed by user
+		if entry.ChangedByUserID != nil {
+			var changedBy models.User
+			err := r.db.GetContext(ctx, &changedBy, `SELECT id, name, email, role FROM users WHERE id = $1`, entry.ChangedByUserID)
+			if err == nil {
+				entry.ChangedByUser = &changedBy
+			}
+		}
+	}
+
+	return history, nil
 }
