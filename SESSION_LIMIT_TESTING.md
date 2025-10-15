@@ -61,7 +61,7 @@ echo "Token 4: $TOKEN4"
 ```
 
 ### Passo 4: Verificar email recebido
-Verifique o email em **dashtrack@paulochiaradia.com.br** com:
+Verifique o email configurado no sistema com:
 - ✉️ **Assunto**: 🔒 Nova sessão ativada - Sessões antigas revogadas
 - 📋 **Conteúdo**:
   - Detalhes da nova sessão (IP, user-agent, data/hora)
@@ -246,7 +246,7 @@ docker logs dashtrack-api-1 --tail 50 | grep -i "session"
    ```
    SMTP_HOST=smtp.umbler.com
    SMTP_PORT=587
-   SMTP_FROM=dashtrack@paulochiaradia.com.br
+   SMTP_FROM=seu-email@seudominio.com
    SMTP_PASSWORD=<senha>
    ```
 2. Verificar logs: `docker logs dashtrack-api-1 | grep -i email`
