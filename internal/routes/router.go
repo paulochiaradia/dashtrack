@@ -15,23 +15,25 @@ import (
 
 // Router struct holds all dependencies for the router
 type Router struct {
-	engine           *gin.Engine
-	cfg              *config.Config
-	db               *sqlx.DB
-	authHandler      *handlers.AuthHandler
-	userHandler      *handlers.UserHandler
-	sensorHandler    *handlers.SensorHandler
-	companyHandler   *handlers.CompanyHandler
-	teamHandler      *handlers.TeamHandler
-	vehicleHandler   *handlers.VehicleHandler
-	esp32Handler     *handlers.ESP32DeviceHandler
-	securityHandler  *handlers.SecurityHandler
-	sessionHandler   *handlers.SessionHandler
-	dashboardHandler *handlers.DashboardHandler
-	auditHandler     *handlers.AuditHandler
-	tokenService     *services.TokenService
-	auditService     *services.AuditService
-	authMiddleware   *middleware.GinAuthMiddleware
+	engine               *gin.Engine
+	cfg                  *config.Config
+	db                   *sqlx.DB
+	authHandler          *handlers.AuthHandler
+	userHandler          *handlers.UserHandler
+	sensorHandler        *handlers.SensorHandler
+	companyHandler       *handlers.CompanyHandler
+	teamHandler          *handlers.TeamHandler
+	vehicleHandler       *handlers.VehicleHandler
+	esp32Handler         *handlers.ESP32DeviceHandler
+	securityHandler      *handlers.SecurityHandler
+	sessionHandler       *handlers.SessionHandler
+	dashboardHandler     *handlers.DashboardHandler
+	auditHandler         *handlers.AuditHandler
+	passwordResetHandler *handlers.PasswordResetHandler
+	tokenService         *services.TokenService
+	auditService         *services.AuditService
+	emailService         *services.EmailService
+	authMiddleware       *middleware.GinAuthMiddleware
 }
 
 // NewRouter creates and configures a new router
@@ -61,9 +63,13 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	auditService := services.NewAuditService(sqlxDB)
 	sessionManager := services.NewSessionManager(sqlxDB)
 	userService := services.NewUserService(userRepo, roleRepo, cfg.BcryptCost)
+	emailService := services.NewEmailService(cfg)
+
+	// Set email service in token service for session limit notifications
+	tokenService.SetEmailService(emailService)
 
 	// Handlers
-	authHandler := handlers.NewAuthHandler(userRepo, authLogRepo, roleRepo, tokenService, cfg.BcryptCost)
+	authHandler := handlers.NewAuthHandler(userRepo, authLogRepo, roleRepo, tokenService, emailService, cfg.BcryptCost)
 	userHandler := handlers.NewUserHandler(userService)
 	sensorHandler := handlers.NewSensorHandler(sensorRepo)
 	companyHandler := handlers.NewCompanyHandler(companyRepo)
@@ -74,28 +80,31 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 	sessionHandler := handlers.NewSessionHandler(sessionManager)
 	dashboardHandler := handlers.NewDashboardHandler(userRepo, authLogRepo, sessionRepo, companyRepo)
 	auditHandler := handlers.NewAuditHandler(auditService)
+	passwordResetHandler := handlers.NewPasswordResetHandler(db, emailService)
 
 	// Middleware
 	authMiddleware := middleware.NewGinAuthMiddleware(tokenService)
 
 	router := &Router{
-		engine:           gin.New(),
-		cfg:              cfg,
-		db:               sqlxDB,
-		authHandler:      authHandler,
-		userHandler:      userHandler,
-		sensorHandler:    sensorHandler,
-		companyHandler:   companyHandler,
-		teamHandler:      teamHandler,
-		vehicleHandler:   vehicleHandler,
-		esp32Handler:     esp32Handler,
-		securityHandler:  securityHandler,
-		sessionHandler:   sessionHandler,
-		dashboardHandler: dashboardHandler,
-		auditHandler:     auditHandler,
-		tokenService:     tokenService,
-		auditService:     auditService,
-		authMiddleware:   authMiddleware,
+		engine:               gin.New(),
+		cfg:                  cfg,
+		db:                   sqlxDB,
+		authHandler:          authHandler,
+		userHandler:          userHandler,
+		sensorHandler:        sensorHandler,
+		companyHandler:       companyHandler,
+		teamHandler:          teamHandler,
+		vehicleHandler:       vehicleHandler,
+		esp32Handler:         esp32Handler,
+		securityHandler:      securityHandler,
+		sessionHandler:       sessionHandler,
+		dashboardHandler:     dashboardHandler,
+		auditHandler:         auditHandler,
+		passwordResetHandler: passwordResetHandler,
+		tokenService:         tokenService,
+		auditService:         auditService,
+		emailService:         emailService,
+		authMiddleware:       authMiddleware,
 	}
 
 	router.setupMiddleware()
@@ -127,6 +136,11 @@ func (r *Router) setupRoutes() {
 	{
 		public.POST("/login", r.authHandler.LoginGin)
 		public.POST("/refresh", r.authHandler.RefreshTokenGin)
+
+		// Password recovery routes
+		public.POST("/forgot-password", r.passwordResetHandler.ForgotPassword)
+		public.POST("/verify-reset-code", r.passwordResetHandler.VerifyResetCode)
+		public.POST("/reset-password", r.passwordResetHandler.ResetPassword)
 	}
 
 	// Protected routes (authentication required)

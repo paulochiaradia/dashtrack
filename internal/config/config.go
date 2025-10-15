@@ -8,6 +8,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+// SMTPConfig contém configurações do servidor SMTP
+type SMTPConfig struct {
+	Host     string `mapstructure:"SMTP_HOST"`
+	Port     string `mapstructure:"SMTP_PORT"`
+	Username string `mapstructure:"SMTP_USERNAME"`
+	Password string `mapstructure:"SMTP_PASSWORD"`
+	From     string `mapstructure:"SMTP_FROM"`
+	FromName string `mapstructure:"SMTP_FROM_NAME"`
+	UseTLS   bool   `mapstructure:"SMTP_USE_TLS"`
+}
+
 type Config struct {
 	// Database
 	DBSource string `mapstructure:"DB_SOURCE"`
@@ -21,12 +32,8 @@ type Config struct {
 	JWTAccessExpireMinutes int    `mapstructure:"JWT_ACCESS_EXPIRE_MINUTES"`
 	JWTRefreshExpireHours  int    `mapstructure:"JWT_REFRESH_EXPIRE_HOURS"`
 
-	// Email
-	SMTPHost     string `mapstructure:"SMTP_HOST"`
-	SMTPPort     int    `mapstructure:"SMTP_PORT"`
-	SMTPUsername string `mapstructure:"SMTP_USERNAME"`
-	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
-	FromEmail    string `mapstructure:"FROM_EMAIL"`
+	// Email/SMTP
+	SMTP SMTPConfig `mapstructure:",squash"`
 
 	// Application
 	AppName    string `mapstructure:"APP_NAME"`
@@ -56,24 +63,30 @@ func LoadConfig() *Config {
 		viper.SetDefault("SERVER_ENV", "development")
 		viper.SetDefault("JWT_ACCESS_EXPIRE_MINUTES", 60) // Aumentado para 60 minutos durante testes
 		viper.SetDefault("JWT_REFRESH_EXPIRE_HOURS", 24)
-		viper.SetDefault("SMTP_PORT", 587)
+		viper.SetDefault("SMTP_PORT", "587")
+		viper.SetDefault("SMTP_USE_TLS", true)
+		viper.SetDefault("SMTP_FROM_NAME", "DashTrack")
 		viper.SetDefault("BCRYPT_COST", 12)
 		viper.SetDefault("PASSWORD_RESET_EXPIRE_HOURS", 1)
 		viper.SetDefault("APP_NAME", "Dashtrack API")
 		viper.SetDefault("APP_VERSION", "1.0.0")
 
 		config = &Config{
-			DBSource:                 viper.GetString("DB_SOURCE"),
-			ServerPort:               viper.GetString("SERVER_PORT"),
-			ServerEnv:                viper.GetString("SERVER_ENV"),
-			JWTSecret:                viper.GetString("JWT_SECRET"),
-			JWTAccessExpireMinutes:   viper.GetInt("JWT_ACCESS_EXPIRE_MINUTES"),
-			JWTRefreshExpireHours:    viper.GetInt("JWT_REFRESH_EXPIRE_HOURS"),
-			SMTPHost:                 viper.GetString("SMTP_HOST"),
-			SMTPPort:                 viper.GetInt("SMTP_PORT"),
-			SMTPUsername:             viper.GetString("SMTP_USERNAME"),
-			SMTPPassword:             viper.GetString("SMTP_PASSWORD"),
-			FromEmail:                viper.GetString("FROM_EMAIL"),
+			DBSource:               viper.GetString("DB_SOURCE"),
+			ServerPort:             viper.GetString("SERVER_PORT"),
+			ServerEnv:              viper.GetString("SERVER_ENV"),
+			JWTSecret:              viper.GetString("JWT_SECRET"),
+			JWTAccessExpireMinutes: viper.GetInt("JWT_ACCESS_EXPIRE_MINUTES"),
+			JWTRefreshExpireHours:  viper.GetInt("JWT_REFRESH_EXPIRE_HOURS"),
+			SMTP: SMTPConfig{
+				Host:     viper.GetString("SMTP_HOST"),
+				Port:     viper.GetString("SMTP_PORT"),
+				Username: viper.GetString("SMTP_USERNAME"),
+				Password: viper.GetString("SMTP_PASSWORD"),
+				From:     viper.GetString("SMTP_FROM"),
+				FromName: viper.GetString("SMTP_FROM_NAME"),
+				UseTLS:   viper.GetBool("SMTP_USE_TLS"),
+			},
 			AppName:                  viper.GetString("APP_NAME"),
 			AppVersion:               viper.GetString("APP_VERSION"),
 			AppURL:                   viper.GetString("APP_URL"),

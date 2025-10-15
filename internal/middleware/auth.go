@@ -39,8 +39,8 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		tokenString := tokenParts[1]
 
-		// Validate token using TokenService
-		user, err := m.tokenService.ValidateAccessToken(c.Request.Context(), tokenString)
+		// Validate token using TokenService and get session_id
+		user, sessionID, err := m.tokenService.ValidateAccessTokenWithSession(c.Request.Context(), tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
@@ -49,6 +49,7 @@ func (m *GinAuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		// Set user context
 		c.Set("user_id", user.ID.String())
+		c.Set("session_id", sessionID.String())
 		c.Set("email", user.Email)
 		c.Set("name", user.Name)
 		c.Set("role_id", user.RoleID.String())

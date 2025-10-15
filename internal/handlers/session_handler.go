@@ -181,3 +181,73 @@ func (sh *SessionHandler) GetSecurityAlerts(c *gin.Context) {
 		"has_concerns":    len(alerts) > 0,
 	})
 }
+
+// RevokeAllExceptCurrent revokes all active sessions except the current one
+func (sh *SessionHandler) RevokeAllExceptCurrent(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User context not found"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Get current session ID from token
+	currentSessionIDStr, exists := c.Get("session_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session context not found"})
+		return
+	}
+
+	currentSessionID, err := uuid.Parse(currentSessionIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
+		return
+	}
+
+	// Get all active sessions
+	sessions, err := sh.sessionManager.GetActiveSessionsForUser(c.Request.Context(), userID)
+	if err != nil {
+		logger.Error("Failed to get active sessions", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve active sessions"})
+		return
+	}
+
+	// Filter out current session and collect IDs to revoke
+	var sessionsToRevoke []uuid.UUID
+	for _, session := range sessions {
+		if session.ID != currentSessionID {
+			sessionsToRevoke = append(sessionsToRevoke, session.ID)
+		}
+	}
+
+	if len(sessionsToRevoke) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message":       "No other sessions to revoke",
+			"revoked_count": 0,
+		})
+		return
+	}
+
+	// Revoke all other sessions
+	err = sh.sessionManager.RevokeOldestSessions(c.Request.Context(), sessionsToRevoke, "user_requested_revoke_all")
+	if err != nil {
+		logger.Error("Failed to revoke sessions", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke sessions"})
+		return
+	}
+
+	logger.Info("User revoked all other sessions",
+		zap.String("user_id", userID.String()),
+		zap.String("current_session_id", currentSessionID.String()),
+		zap.Int("revoked_count", len(sessionsToRevoke)))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "All other sessions revoked successfully",
+		"revoked_count": len(sessionsToRevoke),
+	})
+}

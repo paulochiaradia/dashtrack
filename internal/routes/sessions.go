@@ -12,6 +12,7 @@ func (r *Router) setupSessionRoutes() {
 		sessions.GET("/dashboard", r.sessionHandler.GetSessionDashboard)
 		sessions.GET("/active", r.sessionHandler.GetActiveSessions)
 		sessions.DELETE("/:sessionId", r.sessionHandler.RevokeSession)
+		sessions.DELETE("/revoke-all-except-current", r.sessionHandler.RevokeAllExceptCurrent)
 		sessions.GET("/metrics", r.sessionHandler.GetSessionMetrics)
 		sessions.GET("/security-alerts", r.sessionHandler.GetSecurityAlerts)
 	}

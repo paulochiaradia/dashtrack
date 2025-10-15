@@ -148,18 +148,49 @@ func (sm *SessionManager) RevokeOldestSessions(ctx context.Context, sessionIDs [
 		return nil
 	}
 
-	query := `
+	// Begin transaction to update both tables
+	tx, err := sm.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update session_tokens
+	query1 := `
 		UPDATE session_tokens 
 		SET revoked = true, revoked_at = NOW(), updated_at = NOW()
 		WHERE id = ANY($1)
 	`
 
-	_, err := sm.db.ExecContext(ctx, query, sessionIDs)
+	_, err = tx.ExecContext(ctx, query1, sessionIDs)
 	if err != nil {
-		return fmt.Errorf("failed to revoke sessions: %w", err)
+		return fmt.Errorf("failed to revoke sessions in session_tokens: %w", err)
 	}
 
-	logger.Info("Revoked old sessions",
+	// Update user_sessions (mark as inactive)
+	// Convertendo UUIDs para strings para usar com VARCHAR(128)
+	sessionIDStrings := make([]string, len(sessionIDs))
+	for i, id := range sessionIDs {
+		sessionIDStrings[i] = id.String()
+	}
+
+	query2 := `
+		UPDATE user_sessions 
+		SET active = false
+		WHERE id = ANY($1)
+	`
+
+	_, err = tx.ExecContext(ctx, query2, sessionIDStrings)
+	if err != nil {
+		return fmt.Errorf("failed to revoke sessions in user_sessions: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	logger.Info("Revoked old sessions in both tables",
 		zap.Int("count", len(sessionIDs)),
 		zap.String("reason", reason),
 		zap.Any("session_ids", sessionIDs))

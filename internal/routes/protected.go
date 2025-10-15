@@ -10,6 +10,7 @@ func (r *Router) setupProtectedRoutes() {
 	protected.GET("/profile", r.authHandler.MeGin)
 	protected.POST("/profile/change-password", r.authHandler.ChangePasswordGin)
 	protected.GET("/roles", r.authHandler.GetRolesGin)
+	protected.GET("/users/:id/history", r.authHandler.GetUserHistoryGin)
 
 	// Dashboard for all authenticated users (role-based filtering happens inside handler)
 	protected.GET("/dashboard", r.dashboardHandler.GetDashboard)
