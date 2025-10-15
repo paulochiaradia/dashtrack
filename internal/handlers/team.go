@@ -511,7 +511,7 @@ func (h *TeamHandler) UpdateMemberRole(c *gin.Context) {
 	}
 
 	var req struct {
-		RoleInTeam string `json:"role_in_team" binding:"required"`
+		RoleInTeam string `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor helper team_lead"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		span.RecordError(err)
@@ -881,8 +881,9 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 		return
 	}
 
-	teamIDStr := c.Param("id")
-	newTeamID, err := uuid.Parse(teamIDStr)
+	// Get FROM team ID from URL (source team)
+	fromTeamIDStr := c.Param("id")
+	fromTeamID, err := uuid.Parse(fromTeamIDStr)
 	if err != nil {
 		utils.BadRequestResponse(c, "Invalid team ID")
 		return
@@ -895,7 +896,10 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 		return
 	}
 
-	var req models.TransferTeamMemberRequest
+	var req struct {
+		ToTeamID   uuid.UUID `json:"to_team_id" binding:"required"`
+		RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor helper team_lead"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		span.RecordError(err)
 		utils.ValidationErrorResponse(c, err)
@@ -903,20 +907,20 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 	}
 
 	// Verify both teams exist and belong to company
-	oldTeam, err := h.teamRepo.GetByID(ctx, req.FromTeamID, *companyID)
+	oldTeam, err := h.teamRepo.GetByID(ctx, fromTeamID, *companyID)
 	if err != nil || oldTeam == nil {
 		utils.BadRequestResponse(c, "Source team not found")
 		return
 	}
 
-	newTeam, err := h.teamRepo.GetByID(ctx, newTeamID, *companyID)
+	newTeam, err := h.teamRepo.GetByID(ctx, req.ToTeamID, *companyID)
 	if err != nil || newTeam == nil {
 		utils.NotFoundResponse(c, "Destination team not found")
 		return
 	}
 
 	// Check if user is member of source team
-	exists, err := h.teamRepo.CheckMemberExists(ctx, req.FromTeamID, userID)
+	exists, err := h.teamRepo.CheckMemberExists(ctx, fromTeamID, userID)
 	if err != nil {
 		span.RecordError(err)
 		utils.InternalServerErrorResponse(c, "Failed to check member existence")
@@ -929,7 +933,7 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 	}
 
 	// Check if user is already member of destination team
-	alreadyExists, err := h.teamRepo.CheckMemberExists(ctx, newTeamID, userID)
+	alreadyExists, err := h.teamRepo.CheckMemberExists(ctx, req.ToTeamID, userID)
 	if err != nil {
 		span.RecordError(err)
 		utils.InternalServerErrorResponse(c, "Failed to check destination team membership")
@@ -942,7 +946,7 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 	}
 
 	// Remove from old team
-	err = h.teamRepo.RemoveMember(ctx, req.FromTeamID, userID)
+	err = h.teamRepo.RemoveMember(ctx, fromTeamID, userID)
 	if err != nil {
 		span.RecordError(err)
 		logger.Error("Failed to remove member from source team", zap.Error(err))
@@ -952,7 +956,7 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 
 	// Add to new team
 	teamMember := &models.TeamMember{
-		TeamID:     newTeamID,
+		TeamID:     req.ToTeamID,
 		UserID:     userID,
 		RoleInTeam: req.RoleInTeam,
 	}
@@ -963,7 +967,7 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 		logger.Error("Failed to add member to destination team", zap.Error(err))
 		// Try to rollback by adding back to old team
 		_ = h.teamRepo.AddMember(ctx, &models.TeamMember{
-			TeamID:     req.FromTeamID,
+			TeamID:     fromTeamID,
 			UserID:     userID,
 			RoleInTeam: req.RoleInTeam,
 		})
@@ -972,15 +976,15 @@ func (h *TeamHandler) TransferMemberToTeam(c *gin.Context) {
 	}
 
 	span.SetAttributes(
-		attribute.String("from_team.id", req.FromTeamID.String()),
-		attribute.String("to_team.id", newTeamID.String()),
+		attribute.String("from_team.id", fromTeamID.String()),
+		attribute.String("to_team.id", req.ToTeamID.String()),
 		attribute.String("user.id", userID.String()),
 		attribute.String("role", req.RoleInTeam),
 	)
 
 	utils.SuccessResponse(c, http.StatusOK, "Team member transferred successfully", gin.H{
-		"from_team_id": req.FromTeamID,
-		"to_team_id":   newTeamID,
+		"from_team_id": fromTeamID,
+		"to_team_id":   req.ToTeamID,
 		"user_id":      userID,
 		"role":         req.RoleInTeam,
 	})

@@ -344,12 +344,12 @@ func (r *TeamRepository) UpdateMemberRole(ctx context.Context, teamID, userID uu
 	// Get current role before update (for history)
 	var currentRole string
 	var companyID uuid.UUID
-	err := r.db.GetContext(ctx, &currentRole,
+	errRole := r.db.GetContext(ctx, &currentRole,
 		`SELECT role_in_team FROM team_members WHERE team_id = $1 AND user_id = $2`,
 		teamID, userID)
 
-	if err == nil {
-		err = r.db.GetContext(ctx, &companyID, `SELECT company_id FROM teams WHERE id = $1`, teamID)
+	if errRole == nil {
+		errRole = r.db.GetContext(ctx, &companyID, `SELECT company_id FROM teams WHERE id = $1`, teamID)
 	}
 
 	query := `
@@ -358,10 +358,10 @@ func (r *TeamRepository) UpdateMemberRole(ctx context.Context, teamID, userID uu
 		WHERE team_id = $2 AND user_id = $3
 	`
 
-	result, err2 := r.db.ExecContext(ctx, query, newRole, teamID, userID)
-	if err2 != nil {
-		span.RecordError(err2)
-		return fmt.Errorf("failed to update member role: %w", err2)
+	result, err := r.db.ExecContext(ctx, query, newRole, teamID, userID)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to update member role: %w", err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
@@ -370,7 +370,7 @@ func (r *TeamRepository) UpdateMemberRole(ctx context.Context, teamID, userID uu
 	}
 
 	// Log role change to history (only if role actually changed)
-	if err == nil && currentRole != newRole {
+	if errRole == nil && currentRole != newRole {
 		history := &models.TeamMemberHistory{
 			TeamID:             teamID,
 			UserID:             userID,

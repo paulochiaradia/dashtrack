@@ -224,7 +224,7 @@ type CreateTeamRequest struct {
 // TransferTeamMemberRequest represents request to transfer a member to another team
 type TransferTeamMemberRequest struct {
 	FromTeamID uuid.UUID `json:"from_team_id" binding:"required"`
-	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor"`
+	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor helper team_lead"`
 }
 
 // CreateVehicleRequest represents request to create a new vehicle
