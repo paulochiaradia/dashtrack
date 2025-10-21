@@ -3,6 +3,7 @@ package testutils
 import (
 	"context"
 	"database/sql"
+	"os"
 	"time"
 
 	"testing"
@@ -389,4 +390,13 @@ func (tl *TestLogger) Success(msg string, args ...interface{}) {
 // Failure logs a failure message
 func (tl *TestLogger) Failure(msg string, args ...interface{}) {
 	tl.t.Logf("❌ FAILURE: "+msg, args...)
+}
+
+// GetAPIURL returns the base API URL for testing
+// Reads from TEST_API_URL environment variable or returns default localhost:8080
+func GetAPIURL() string {
+	if url := os.Getenv("TEST_API_URL"); url != "" {
+		return url
+	}
+	return "http://localhost:8080"
 }

@@ -221,6 +221,13 @@ type CreateTeamRequest struct {
 	ManagerID   *uuid.UUID `json:"manager_id"`
 }
 
+// UpdateTeamRequest represents request to update an existing team
+type UpdateTeamRequest struct {
+	Name        *string    `json:"name" binding:"omitempty,min=2,max=255"`
+	Description *string    `json:"description"`
+	ManagerID   *uuid.UUID `json:"manager_id"`
+}
+
 // TransferTeamMemberRequest represents request to transfer a member to another team
 type TransferTeamMemberRequest struct {
 	FromTeamID uuid.UUID `json:"from_team_id" binding:"required"`

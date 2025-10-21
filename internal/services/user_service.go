@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -167,7 +168,7 @@ func (s *UserService) CreateUser(ctx context.Context, requesterContext *models.U
 
 	// Check if email already exists
 	existingUser, err := s.userRepo.GetByEmail(ctx, req.Email)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to check email uniqueness: %w", err)
 	}
 	if existingUser != nil {

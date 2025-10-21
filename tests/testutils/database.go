@@ -10,6 +10,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	pgMigrate "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -19,6 +20,7 @@ import (
 type TestDB struct {
 	DB       *gorm.DB
 	SqlDB    *sql.DB
+	SqlxDB   *sqlx.DB
 	TestName string
 }
 
@@ -36,7 +38,7 @@ func SetupTestDB(testName string) (*TestDB, error) {
 		return nil, fmt.Errorf("failed to create test database: %v", err)
 	}
 
-	// Connect to the test database
+	// Connect to the test database with GORM
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC",
 		host, port, user, password, dbname)
 
@@ -52,9 +54,16 @@ func SetupTestDB(testName string) (*TestDB, error) {
 		return nil, fmt.Errorf("failed to get sql.DB: %v", err)
 	}
 
+	// Connect with sqlx for repositories that need it
+	sqlxDB, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect with sqlx: %v", err)
+	}
+
 	testDB := &TestDB{
 		DB:       db,
 		SqlDB:    sqlDB,
+		SqlxDB:   sqlxDB,
 		TestName: testName,
 	}
 
@@ -231,7 +240,12 @@ func (tdb *TestDB) CleanupTestData() error {
 func (tdb *TestDB) TearDown() error {
 	dbname := fmt.Sprintf("dashtrack_test_%s", tdb.TestName)
 
-	// Close the connection
+	// Close the connections
+	if tdb.SqlxDB != nil {
+		if err := tdb.SqlxDB.Close(); err != nil {
+			return err
+		}
+	}
 	if err := tdb.SqlDB.Close(); err != nil {
 		return err
 	}

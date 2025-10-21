@@ -55,8 +55,7 @@ func (s *TeamManagementTestSuite) TearDownSuite() {
 func (s *TeamManagementTestSuite) TestCreateTeam() {
 	createReq := models.CreateTeamRequest{
 		Name:        "Test Team Alpha",
-		Description: "Integration test team",
-		Status:      "active",
+		Description: stringPtr("Integration test team"),
 	}
 
 	body, err := json.Marshal(createReq)
@@ -125,9 +124,8 @@ func (s *TeamManagementTestSuite) TestGetTeamDetails() {
 func (s *TeamManagementTestSuite) TestUpdateTeam() {
 	teamID := uuid.New()
 	updateReq := models.UpdateTeamRequest{
-		Name:        "Updated Team Name",
-		Description: "Updated description",
-		Status:      "active",
+		Name:        stringPtr("Updated Team Name"),
+		Description: stringPtr("Updated description"),
 	}
 
 	body, err := json.Marshal(updateReq)
@@ -178,7 +176,7 @@ func (s *TeamManagementTestSuite) TestAddTeamMember() {
 	userID := uuid.New()
 
 	addMemberReq := models.AddTeamMemberRequest{
-		UserID:     userID.String(),
+		UserID:     userID,
 		RoleInTeam: "driver",
 	}
 
@@ -252,7 +250,7 @@ func (s *TeamManagementTestSuite) TestUpdateMemberRole() {
 	userID := uuid.New()
 
 	updateRoleReq := models.UpdateMemberRoleRequest{
-		RoleInTeam: "manager",
+		NewRoleInTeam: "manager",
 	}
 
 	body, err := json.Marshal(updateRoleReq)
@@ -456,7 +454,7 @@ func (s *TeamManagementTestSuite) TestValidationErrors() {
 			method:   "POST",
 			body: models.CreateTeamRequest{
 				Name:        "",
-				Description: "Test",
+				Description: stringPtr("Test"),
 			},
 			expectCode: http.StatusBadRequest,
 		},
@@ -465,7 +463,7 @@ func (s *TeamManagementTestSuite) TestValidationErrors() {
 			endpoint: "/api/v1/company-admin/teams/" + uuid.New().String() + "/members",
 			method:   "POST",
 			body: models.AddTeamMemberRequest{
-				UserID:     uuid.New().String(),
+				UserID:     uuid.New(),
 				RoleInTeam: "invalid_role",
 			},
 			expectCode: http.StatusBadRequest,
@@ -512,4 +510,13 @@ func (s *TeamManagementTestSuite) TestResponseFormat() {
 	// Test would verify response structure
 	// For now, just ensure the test framework is working
 	assert.NotNil(s.T(), s.apiURL)
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+// stringPtr returns a pointer to a string
+func stringPtr(s string) *string {
+	return &s
 }

@@ -20,14 +20,14 @@ import (
 
 // TeamHandler handles team-related HTTP requests
 type TeamHandler struct {
-	teamRepo    *repository.TeamRepository
-	userRepo    *repository.UserRepository
-	vehicleRepo *repository.VehicleRepository
+	teamRepo    repository.TeamRepositoryInterface
+	userRepo    repository.UserRepositoryInterface
+	vehicleRepo repository.VehicleRepositoryInterface
 	tracer      trace.Tracer
 }
 
 // NewTeamHandler creates a new team handler
-func NewTeamHandler(teamRepo *repository.TeamRepository, userRepo *repository.UserRepository, vehicleRepo *repository.VehicleRepository) *TeamHandler {
+func NewTeamHandler(teamRepo repository.TeamRepositoryInterface, userRepo repository.UserRepositoryInterface, vehicleRepo repository.VehicleRepositoryInterface) *TeamHandler {
 	return &TeamHandler{
 		teamRepo:    teamRepo,
 		userRepo:    userRepo,

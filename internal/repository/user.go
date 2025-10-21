@@ -33,8 +33,7 @@ type UserRepositoryInterface interface {
 	UpdateLoginAttempts(ctx context.Context, id uuid.UUID, attempts int, blockedUntil *time.Time) error
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	GetUserContext(ctx context.Context, userID uuid.UUID) (*models.UserContext, error)
-
-	// Dashboard methods
+	Search(ctx context.Context, companyID *uuid.UUID, searchTerm string, limit, offset int) ([]*models.User, error)
 	CountUsers(ctx context.Context, companyID *uuid.UUID) (int, error)
 	CountActiveUsers(ctx context.Context, companyID *uuid.UUID) (int, error)
 }

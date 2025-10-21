@@ -2,772 +2,366 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"dashtrack/internal/handlers"
+	"dashtrack/internal/models"
+	"dashtrack/internal/repository"
+	"dashtrack/internal/services"
+	"dashtrack/tests/testutils"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/paulochiaradia/dashtrack/internal/auth"
-	"github.com/paulochiaradia/dashtrack/internal/middleware"
-	"github.com/paulochiaradia/dashtrack/internal/models"
-	"github.com/paulochiaradia/dashtrack/internal/repository"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type HierarchyTestSuite struct {
 	suite.Suite
-	router      *gin.Engine
-	userRepo    *repository.UserRepository
-	companyRepo *repository.CompanyRepository
-	esp32Repo   *repository.ESP32DeviceRepository
-	jwtManager  *auth.JWTManager
-
-	// Test data
+	testDB       *testutils.TestDB
+	router       *gin.Engine
+	tokenService *services.TokenService
+	companyRepo  *repository.CompanyRepository
+	userRepo     *repository.UserRepository
+	roleRepo     *repository.RoleRepository
 	masterUser   *models.User
-	companyAdmin *models.User
-	driver       *models.User
-	helper       *models.User
-	testCompany  *models.Company
-	testCompany2 *models.Company
-	testVehicle  *models.Vehicle
-	testESP32    *models.ESP32Device
-
-	// Tokens
-	masterToken       string
-	companyAdminToken string
-	driverToken       string
-	helperToken       string
+	masterToken  string
+	adminUser    *models.User
+	adminToken   string
+	company1     *models.Company
+	company2     *models.Company
+	masterRole   *models.Role
+	adminRole    *models.Role
+	userRole     *models.Role
 }
 
-func (suite *HierarchyTestSuite) SetupSuite() {
-	// Initialize test database and dependencies
-	gin.SetMode(gin.TestMode)
-
-	// This would normally connect to a test database
-	// For this example, we'll use mocks, but in real implementation
-	// you'd set up a test DB connection
-
-	suite.jwtManager = auth.NewJWTManager("test-secret", time.Hour, time.Hour*24, "test-issuer")
-
-	// Setup router with all routes
-	suite.router = gin.New()
-	suite.setupRoutes()
-
-	// Create test data
-	suite.createTestData()
-}
-
-func (suite *HierarchyTestSuite) setupRoutes() {
-	// Setup authentication middleware
-	authMiddleware := middleware.NewGinAuthMiddleware(suite.jwtManager)
-
-	// Public routes
-	suite.router.POST("/auth/login", func(c *gin.Context) {
-		// Mock login endpoint for testing
-		var req struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
-		}
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request"})
-			return
-		}
-
-		// Mock user authentication
-		var user *models.User
-		var role string
-
-		switch req.Email {
-		case "master@dashtrack.com":
-			user = suite.masterUser
-			role = "master"
-		case "admin@company1.com":
-			user = suite.companyAdmin
-			role = "company_admin"
-		case "driver@company1.com":
-			user = suite.driver
-			role = "driver"
-		case "helper@company1.com":
-			user = suite.helper
-			role = "helper"
-		default:
-			c.JSON(401, gin.H{"error": "Invalid credentials"})
-			return
-		}
-
-		userContext := auth.UserContext{
-			UserID:   user.ID,
-			Email:    user.Email,
-			Name:     user.Name,
-			RoleID:   user.RoleID,
-			RoleName: role,
-			TenantID: user.CompanyID,
-		}
-
-		accessToken, refreshToken, err := suite.jwtManager.GenerateTokens(userContext)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "Failed to generate tokens"})
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"access_token":  accessToken,
-			"refresh_token": refreshToken,
-			"expires_in":    3600,
-			"user": gin.H{
-				"id":    user.ID,
-				"name":  user.Name,
-				"email": user.Email,
-				"role":  role,
-			},
-		})
-	})
-
-	// Protected routes
-	api := suite.router.Group("/api/v1")
-	api.Use(authMiddleware.RequireAuth())
-
-	// Master routes
-	master := api.Group("/master")
-	master.Use(middleware.RequireMasterRole())
-	{
-		master.GET("/companies", suite.mockGetAllCompanies)
-		master.POST("/companies", suite.mockCreateCompany)
-		master.GET("/companies/:id", suite.mockGetCompany)
-		master.PUT("/companies/:id", suite.mockUpdateCompany)
-		master.DELETE("/companies/:id", suite.mockDeleteCompany)
-
-		// Master user management
-		master.GET("/users", suite.mockGetAllUsers)
-		master.POST("/users", suite.mockCreateUser)
-		master.GET("/users/:id", suite.mockGetUserByID)
-		master.PUT("/users/:id", suite.mockUpdateUser)
-		master.DELETE("/users/:id", suite.mockDeleteUser)
-	}
-
-	// User routes (protected, for all authenticated users)
-	userRoutes := api.Group("/users")
-	{
-		userRoutes.GET("", suite.mockGetAllUsers)
-		userRoutes.GET("/:id", suite.mockGetUserByID)
-		userRoutes.PUT("/:id", suite.mockUpdateUser)
-		userRoutes.DELETE("/:id", suite.mockDeleteUser)
-	}
-
-	// Company routes
-	company := api.Group("/company")
-	company.Use(middleware.RequireCompanyAccess())
-	{
-		company.GET("/info", suite.mockGetMyCompany)
-
-		// Company admin routes
-		companyAdmin := company.Group("/admin")
-		companyAdmin.Use(middleware.RequireCompanyAdmin())
-		{
-			companyAdmin.GET("/users", suite.mockGetCompanyUsers)
-			companyAdmin.POST("/users", suite.mockCreateCompanyUser)
-		}
-
-		// Vehicle routes
-		vehicles := company.Group("/vehicles")
-		vehicles.Use(middleware.RequireDriverOrHelper())
-		{
-			vehicles.GET("", suite.mockGetVehicles)
-			vehicles.GET("/:id", middleware.RequireVehicleAccess(), suite.mockGetVehicle)
-		}
-
-		// ESP32 routes
-		devices := company.Group("/devices")
-		{
-			devices.GET("", suite.mockGetESP32Devices)
-			devices.POST("/:id/assign-vehicle", middleware.RequireCompanyAdmin(), suite.mockAssignESP32)
-		}
-	}
-
-	// Admin routes
-	admin := api.Group("/admin")
-	admin.Use(middleware.RequireCompanyAdmin())
-	{
-		admin.GET("/users", suite.mockGetAllUsers)
-		admin.POST("/users", suite.mockCreateUser)
-	}
-}
-
-func (suite *HierarchyTestSuite) createTestData() {
-	// Create test companies
-	suite.testCompany = &models.Company{
-		ID:   uuid.New(),
-		Name: "Test Company 1",
-		Slug: "test-company-1",
-	}
-
-	suite.testCompany2 = &models.Company{
-		ID:   uuid.New(),
-		Name: "Test Company 2",
-		Slug: "test-company-2",
-	}
-
-	// Create test users
-	suite.masterUser = &models.User{
-		ID:    uuid.New(),
-		Name:  "Master User",
-		Email: "master@dashtrack.com",
-		Role:  &models.Role{Name: "master"},
-	}
-
-	suite.companyAdmin = &models.User{
-		ID:        uuid.New(),
-		Name:      "Company Admin",
-		Email:     "admin@company1.com",
-		CompanyID: &suite.testCompany.ID,
-		Role:      &models.Role{Name: "company_admin"},
-	}
-
-	suite.driver = &models.User{
-		ID:        uuid.New(),
-		Name:      "Driver User",
-		Email:     "driver@company1.com",
-		CompanyID: &suite.testCompany.ID,
-		Role:      &models.Role{Name: "driver"},
-	}
-
-	suite.helper = &models.User{
-		ID:        uuid.New(),
-		Name:      "Helper User",
-		Email:     "helper@company1.com",
-		CompanyID: &suite.testCompany.ID,
-		Role:      &models.Role{Name: "helper"},
-	}
-
-	// Generate tokens
-	masterUserContext := auth.UserContext{
-		UserID:   suite.masterUser.ID,
-		Email:    suite.masterUser.Email,
-		Name:     suite.masterUser.Name,
-		RoleID:   suite.masterUser.RoleID,
-		RoleName: suite.masterUser.Role.Name,
-	}
-	masterTokens, _, _ := suite.jwtManager.GenerateTokens(masterUserContext)
-	suite.masterToken = masterTokens
-
-	adminUserContext := auth.UserContext{
-		UserID:   suite.companyAdmin.ID,
-		Email:    suite.companyAdmin.Email,
-		Name:     suite.companyAdmin.Name,
-		RoleID:   suite.companyAdmin.RoleID,
-		RoleName: suite.companyAdmin.Role.Name,
-		TenantID: suite.companyAdmin.CompanyID,
-	}
-	adminTokens, _, _ := suite.jwtManager.GenerateTokens(adminUserContext)
-	suite.companyAdminToken = adminTokens
-
-	driverUserContext := auth.UserContext{
-		UserID:   suite.driver.ID,
-		Email:    suite.driver.Email,
-		Name:     suite.driver.Name,
-		RoleID:   suite.driver.RoleID,
-		RoleName: suite.driver.Role.Name,
-		TenantID: suite.driver.CompanyID,
-	}
-	driverTokens, _, _ := suite.jwtManager.GenerateTokens(driverUserContext)
-	suite.driverToken = driverTokens
-
-	helperUserContext := auth.UserContext{
-		UserID:   suite.helper.ID,
-		Email:    suite.helper.Email,
-		Name:     suite.helper.Name,
-		RoleID:   suite.helper.RoleID,
-		RoleName: suite.helper.Role.Name,
-		TenantID: suite.helper.CompanyID,
-	}
-	helperTokens, _, _ := suite.jwtManager.GenerateTokens(helperUserContext)
-	suite.helperToken = helperTokens
-}
-
-// Test Master User Permissions
-func (suite *HierarchyTestSuite) TestMasterUser_CanAccessAllCompanies() {
-	req := httptest.NewRequest("GET", "/api/v1/master/companies", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.masterToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Contains(suite.T(), response, "companies")
-}
-
-func (suite *HierarchyTestSuite) TestMasterUser_CanCreateCompany() {
-	createReq := map[string]interface{}{
-		"name":              "New Test Company",
-		"slug":              "new-test-company",
-		"email":             "contact@newtestcompany.com",
-		"country":           "Brazil",
-		"subscription_plan": "basic",
-	}
-	jsonBody, _ := json.Marshal(createReq)
-
-	req := httptest.NewRequest("POST", "/api/v1/master/companies", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Authorization", "Bearer "+suite.masterToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusCreated, w.Code)
-}
-
-// Test Company Admin Permissions
-func (suite *HierarchyTestSuite) TestCompanyAdmin_CannotAccessMasterRoutes() {
-	req := httptest.NewRequest("GET", "/api/v1/master/companies", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.companyAdminToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestCompanyAdmin_CanAccessOwnCompany() {
-	req := httptest.NewRequest("GET", "/api/v1/company/info", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.companyAdminToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestCompanyAdmin_CanManageCompanyUsers() {
-	req := httptest.NewRequest("GET", "/api/v1/company/admin/users", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.companyAdminToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-// Test Driver Permissions
-func (suite *HierarchyTestSuite) TestDriver_CannotAccessMasterRoutes() {
-	req := httptest.NewRequest("GET", "/api/v1/master/companies", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestDriver_CannotAccessCompanyAdmin() {
-	req := httptest.NewRequest("GET", "/api/v1/company/admin/users", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestDriver_CanAccessCompanyInfo() {
-	req := httptest.NewRequest("GET", "/api/v1/company/info", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestDriver_CanAccessVehicles() {
-	req := httptest.NewRequest("GET", "/api/v1/company/vehicles", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-// Test Helper Permissions (similar to driver)
-func (suite *HierarchyTestSuite) TestHelper_CanAccessVehicles() {
-	req := httptest.NewRequest("GET", "/api/v1/company/vehicles", nil)
-	req.Header.Set("Authorization", "Bearer "+suite.helperToken)
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-// Test Cross-Company Access Prevention
-func (suite *HierarchyTestSuite) TestCompanyAdmin_CannotAccessOtherCompanyData() {
-	// This would test that company admin from company1 cannot access company2 data
-	// In a real implementation, you'd test with actual repository calls
-	assert.True(suite.T(), true, "Cross-company access prevention needs repository-level testing")
-}
-
-// Mock handlers for testing
-func (suite *HierarchyTestSuite) mockGetAllCompanies(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"companies": []gin.H{
-			{"id": suite.testCompany.ID, "name": suite.testCompany.Name},
-			{"id": suite.testCompany2.ID, "name": suite.testCompany2.Name},
-		},
-		"count": 2,
-	})
-}
-
-func (suite *HierarchyTestSuite) mockCreateCompany(c *gin.Context) {
-	c.JSON(201, gin.H{
-		"id":   uuid.New(),
-		"name": "New Test Company",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetCompany(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"id":   suite.testCompany.ID,
-		"name": suite.testCompany.Name,
-	})
-}
-
-func (suite *HierarchyTestSuite) mockUpdateCompany(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"id":   suite.testCompany.ID,
-		"name": "Updated Company Name",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockDeleteCompany(c *gin.Context) {
-	c.JSON(200, gin.H{"message": "Company deleted successfully"})
-}
-
-func (suite *HierarchyTestSuite) mockGetMyCompany(c *gin.Context) {
-	userContext, _ := c.Get("userContext")
-	userCtx := userContext.(*models.UserContext)
-
-	if userCtx.CompanyID == nil {
-		c.JSON(400, gin.H{"error": "No company assigned"})
-		return
-	}
-
-	c.JSON(200, gin.H{
-		"data": gin.H{
-			"id":   userCtx.CompanyID,
-			"name": suite.testCompany.Name,
-		},
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetCompanyUsers(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"users": []gin.H{
-			{"id": suite.companyAdmin.ID, "name": suite.companyAdmin.Name, "role": "company_admin"},
-			{"id": suite.driver.ID, "name": suite.driver.Name, "role": "driver"},
-			{"id": suite.helper.ID, "name": suite.helper.Name, "role": "helper"},
-		},
-	})
-}
-
-func (suite *HierarchyTestSuite) mockCreateCompanyUser(c *gin.Context) {
-	c.JSON(201, gin.H{
-		"id":   uuid.New(),
-		"name": "New Company User",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetVehicles(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"vehicles": []gin.H{
-			{"id": uuid.New(), "license_plate": "ABC-1234"},
-		},
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetVehicle(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"id":            uuid.New(),
-		"license_plate": "ABC-1234",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetESP32Devices(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"devices": []gin.H{
-			{"id": uuid.New(), "device_id": "ESP32_001"},
-		},
-	})
-}
-
-func (suite *HierarchyTestSuite) mockAssignESP32(c *gin.Context) {
-	c.JSON(200, gin.H{"message": "ESP32 assigned successfully"})
-}
-
-func (suite *HierarchyTestSuite) mockGetAllUsers(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"data": gin.H{
-			"users": []gin.H{
-				{"id": suite.masterUser.ID, "name": suite.masterUser.Name, "role": "master"},
-				{"id": suite.companyAdmin.ID, "name": suite.companyAdmin.Name, "role": "company_admin"},
-			},
-		},
-	})
-}
-
-func (suite *HierarchyTestSuite) mockCreateUser(c *gin.Context) {
-	c.JSON(201, gin.H{
-		"id":   uuid.New(),
-		"name": "New User",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockGetUserByID(c *gin.Context) {
-	userID := c.Param("id")
-
-	// Mock user data based on ID
-	if userID == suite.driver.ID.String() {
-		c.JSON(200, gin.H{
-			"id":    suite.driver.ID,
-			"name":  suite.driver.Name,
-			"email": suite.driver.Email,
-		})
-		return
-	}
-
-	c.JSON(200, gin.H{
-		"id":    userID,
-		"name":  "Test User",
-		"email": "test@example.com",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockUpdateUser(c *gin.Context) {
-	userID := c.Param("id")
-	userContext, exists := c.Get("userContext")
-	if !exists {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	uc := userContext.(*models.UserContext)
-
-	// Parse the UUID
-	targetUserID, err := uuid.Parse(userID)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid user ID"})
-		return
-	}
-
-	// Mock permission check
-	canModify := suite.mockCanModifyUser(uc, targetUserID)
-	if !canModify {
-		c.JSON(403, gin.H{"error": "Insufficient permissions"})
-		return
-	}
-
-	c.JSON(200, gin.H{
-		"id":      targetUserID,
-		"name":    "Updated User",
-		"email":   "updated@example.com",
-		"message": "User updated successfully",
-	})
-}
-
-func (suite *HierarchyTestSuite) mockDeleteUser(c *gin.Context) {
-	userID := c.Param("id")
-	c.JSON(200, gin.H{
-		"message": "User deleted successfully",
-		"id":      userID,
-	})
-}
-
-// Mock permission check function
-func (suite *HierarchyTestSuite) mockCanModifyUser(requesterContext *models.UserContext, targetUserID uuid.UUID) bool {
-	// Find target user
-	var targetUser *models.User
-	switch targetUserID {
-	case suite.driver.ID:
-		targetUser = suite.driver
-	case suite.helper.ID:
-		targetUser = suite.helper
-	case suite.companyAdmin.ID:
-		targetUser = suite.companyAdmin
-	case suite.masterUser.ID:
-		targetUser = suite.masterUser
-	default:
-		return false
-	}
-
-	// Apply the same logic as our service
-	switch requesterContext.Role {
-	case "master":
-		return true
-	case "admin":
-		if targetUser.Role == nil {
-			return false
-		}
-		return targetUser.Role.Name != "master" && targetUser.Role.Name != "admin"
-	case "company_admin":
-		if requesterContext.CompanyID == nil || targetUser.CompanyID == nil {
-			return false
-		}
-		if *requesterContext.CompanyID != *targetUser.CompanyID {
-			return false
-		}
-		return targetUser.Role != nil && (targetUser.Role.Name == "driver" || targetUser.Role.Name == "helper")
-	case "driver", "helper":
-		return false
-	default:
-		return false
-	}
-}
-
-// Test new permission hierarchy rules
-func (suite *HierarchyTestSuite) TestDriverCannotModifyOwnData() {
-	// Test: Driver cannot modify their own data
-	updateData := map[string]interface{}{
-		"name":  "New Driver Name",
-		"email": "newdriver@test.com",
-	}
-	jsonData, _ := json.Marshal(updateData)
-
-	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
-	req.Header.Set("Authorization", "Bearer "+suite.driverToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
-
-	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Contains(suite.T(), response["error"], "Insufficient permissions")
-}
-
-func (suite *HierarchyTestSuite) TestHelperCannotModifyOwnData() {
-	// Test: Helper cannot modify their own data
-	updateData := map[string]interface{}{
-		"name":  "New Helper Name",
-		"email": "newhelper@test.com",
-	}
-	jsonData, _ := json.Marshal(updateData)
-
-	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.helper.ID.String(), bytes.NewBuffer(jsonData))
-	req.Header.Set("Authorization", "Bearer "+suite.helperToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusForbidden, w.Code)
-
-	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Contains(suite.T(), response["error"], "Insufficient permissions")
-}
-
-func (suite *HierarchyTestSuite) TestCompanyAdminCanModifyDriverInSameCompany() {
-	// Test: Company Admin can modify drivers in same company
-	updateData := map[string]interface{}{
-		"name": "Updated Driver Name",
-	}
-	jsonData, _ := json.Marshal(updateData)
-
-	req := httptest.NewRequest("PUT", "/api/v1/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
-	req.Header.Set("Authorization", "Bearer "+suite.companyAdminToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-func (suite *HierarchyTestSuite) TestMasterCanModifyAnyUser() {
-	// Test: Master can modify any user
-	updateData := map[string]interface{}{
-		"name": "Master Updated Name",
-	}
-	jsonData, _ := json.Marshal(updateData)
-
-	req := httptest.NewRequest("PUT", "/api/v1/master/users/"+suite.driver.ID.String(), bytes.NewBuffer(jsonData))
-	req.Header.Set("Authorization", "Bearer "+suite.masterToken)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	suite.router.ServeHTTP(w, req)
-
-	assert.Equal(suite.T(), http.StatusOK, w.Code)
-}
-
-// Run the test suite
-func TestHierarchyTestSuite(t *testing.T) {
+func TestHierarchySuite(t *testing.T) {
 	suite.Run(t, new(HierarchyTestSuite))
 }
 
-// Benchmark tests for performance
-func BenchmarkLoginEndpoint(b *testing.B) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
+func (s *HierarchyTestSuite) SetupSuite() {
+	var err error
+	s.testDB, err = testutils.SetupTestDB("hierarchy_test")
+	s.Require().NoError(err)
 
-	// Setup a simple login endpoint
-	router.POST("/auth/login", func(c *gin.Context) {
-		c.JSON(200, gin.H{"token": "test_token"})
-	})
+	// Initialize repositories
+	s.companyRepo = repository.NewCompanyRepository(s.testDB.DB)
+	s.userRepo = repository.NewUserRepository(s.testDB.DB)
+	s.roleRepo = repository.NewRoleRepository(s.testDB.DB)
 
-	loginReq := map[string]string{
-		"email":    "test@example.com",
-		"password": "password123",
+	// Initialize token service
+	s.tokenService = services.NewTokenService(
+		s.testDB.SqlxDB,
+		"test-secret-key",
+		15*time.Minute,
+		7*24*time.Hour,
+	)
+
+	// Create test roles
+	ctx := context.Background()
+	s.masterRole = &models.Role{ID: uuid.New(), Name: "master"}
+	s.adminRole = &models.Role{ID: uuid.New(), Name: "admin"}
+	s.userRole = &models.Role{ID: uuid.New(), Name: "user"}
+
+	s.Require().NoError(s.testDB.DB.Create(s.masterRole).Error)
+	s.Require().NoError(s.testDB.DB.Create(s.adminRole).Error)
+	s.Require().NoError(s.testDB.DB.Create(s.userRole).Error)
+
+	// Create test companies
+	s.company1 = &models.Company{
+		ID:               uuid.New(),
+		Name:             "Company One",
+		Slug:             "company-one",
+		Email:            "contact@company1.com",
+		Phone:            "1111111111",
+		SubscriptionPlan: "basic",
 	}
-	jsonBody, _ := json.Marshal(loginReq)
+	s.Require().NoError(s.testDB.DB.Create(s.company1).Error)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
+	s.company2 = &models.Company{
+		ID:               uuid.New(),
+		Name:             "Company Two",
+		Slug:             "company-two",
+		Email:            "contact@company2.com",
+		Phone:            "2222222222",
+		SubscriptionPlan: "premium",
+	}
+	s.Require().NoError(s.testDB.DB.Create(s.company2).Error)
 
-		router.ServeHTTP(w, req)
+	// Create master user (no company)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("Master123!"), bcrypt.DefaultCost)
+	s.masterUser = &models.User{
+		ID:       uuid.New(),
+		Email:    "master@system.com",
+		Password: string(hashedPassword),
+		Name:     "Master User",
+		Active:   true,
+		RoleID:   s.masterRole.ID,
+	}
+	s.Require().NoError(s.testDB.DB.Create(s.masterUser).Error)
+
+	// Create admin user for company1
+	s.adminUser = &models.User{
+		ID:        uuid.New(),
+		Email:     "admin@company1.com",
+		Password:  string(hashedPassword),
+		Name:      "Admin User",
+		Active:    true,
+		RoleID:    s.adminRole.ID,
+		CompanyID: &s.company1.ID,
+	}
+	s.Require().NoError(s.testDB.DB.Create(s.adminUser).Error)
+
+	// Generate tokens
+	accessToken, _, err := s.tokenService.GenerateTokenPair(ctx, s.masterUser, "127.0.0.1", "test-agent")
+	s.Require().NoError(err)
+	s.masterToken = accessToken
+
+	accessToken, _, err = s.tokenService.GenerateTokenPair(ctx, s.adminUser, "127.0.0.1", "test-agent")
+	s.Require().NoError(err)
+	s.adminToken = accessToken
+
+	// Setup router
+	gin.SetMode(gin.TestMode)
+	s.router = gin.New()
+
+	companyHandler := handlers.NewCompanyHandler(s.companyRepo)
+	authMiddleware := handlers.NewAuthMiddleware(s.tokenService, s.userRepo)
+
+	api := s.router.Group("/api/v1")
+	api.Use(authMiddleware.RequireAuth())
+	{
+		companies := api.Group("/companies")
+		{
+			companies.POST("", authMiddleware.RequireRole("master"), companyHandler.CreateCompany)
+			companies.GET("", companyHandler.GetCompanies)
+			companies.GET("/:id", companyHandler.GetCompanyByID)
+			companies.PUT("/:id", companyHandler.UpdateCompany)
+			companies.DELETE("/:id", authMiddleware.RequireRole("master"), companyHandler.DeleteCompany)
+		}
 	}
 }
 
-func BenchmarkAuthorizationMiddleware(b *testing.B) {
-	gin.SetMode(gin.TestMode)
+func (s *HierarchyTestSuite) TearDownSuite() {
+	s.testDB.Close()
+}
 
-	jwtManager := auth.NewJWTManager("test-secret", time.Hour, time.Hour*24, "test-issuer")
-	userContext := auth.UserContext{
-		UserID:   uuid.New(),
-		Email:    "test@example.com",
-		Name:     "Test User",
-		RoleID:   uuid.New(),
-		RoleName: "admin",
+// TestGetCompanies_Master tests that master can see all companies
+func (s *HierarchyTestSuite) TestGetCompanies_Master() {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/companies", nil)
+	req.Header.Set("Authorization", "Bearer "+s.masterToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	var companies []models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &companies)
+	s.NoError(err)
+	s.GreaterOrEqual(len(companies), 2) // At least company1 and company2
+}
+
+// TestGetCompanies_Admin tests that admin can only see their own company
+func (s *HierarchyTestSuite) TestGetCompanies_Admin() {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/companies", nil)
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	var companies []models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &companies)
+	s.NoError(err)
+	// Admin should only see their company
+	s.Equal(1, len(companies))
+	s.Equal(s.company1.ID, companies[0].ID)
+}
+
+// TestGetCompanyByID_Master tests that master can access any company
+func (s *HierarchyTestSuite) TestGetCompanyByID_Master() {
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/companies/%s", s.company2.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+s.masterToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	var company models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &company)
+	s.NoError(err)
+	s.Equal(s.company2.ID, company.ID)
+	s.Equal("Company Two", company.Name)
+}
+
+// TestGetCompanyByID_Admin_OwnCompany tests admin accessing their own company
+func (s *HierarchyTestSuite) TestGetCompanyByID_Admin_OwnCompany() {
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/companies/%s", s.company1.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	var company models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &company)
+	s.NoError(err)
+	s.Equal(s.company1.ID, company.ID)
+}
+
+// TestGetCompanyByID_Admin_OtherCompany tests admin accessing another company (should fail)
+func (s *HierarchyTestSuite) TestGetCompanyByID_Admin_OtherCompany() {
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/companies/%s", s.company2.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusForbidden, w.Code)
+}
+
+// TestCreateCompany_Master tests that master can create companies
+func (s *HierarchyTestSuite) TestCreateCompany_Master() {
+	createReq := models.CreateCompanyRequest{
+		Name:             "New Company",
+		Slug:             "new-company",
+		Email:            "contact@newcompany.com",
+		Phone:            "3333333333",
+		SubscriptionPlan: "basic",
 	}
-	accessToken, _, _ := jwtManager.GenerateTokens(userContext)
 
-	authMiddleware := middleware.NewGinAuthMiddleware(jwtManager)
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/companies", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.masterToken)
+	w := httptest.NewRecorder()
 
-	router := gin.New()
-	router.Use(authMiddleware.RequireAuth())
-	router.GET("/protected", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "success"})
-	})
+	s.router.ServeHTTP(w, req)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		req := httptest.NewRequest("GET", "/protected", nil)
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-		w := httptest.NewRecorder()
+	s.Equal(http.StatusCreated, w.Code)
 
-		router.ServeHTTP(w, req)
+	var company models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &company)
+	s.NoError(err)
+	s.Equal("New Company", company.Name)
+	s.Equal("new-company", company.Slug)
+}
+
+// TestCreateCompany_Admin tests that admin cannot create companies
+func (s *HierarchyTestSuite) TestCreateCompany_Admin() {
+	createReq := models.CreateCompanyRequest{
+		Name:             "Forbidden Company",
+		Slug:             "forbidden-company",
+		Email:            "contact@forbidden.com",
+		Phone:            "4444444444",
+		SubscriptionPlan: "basic",
 	}
+
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/companies", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusForbidden, w.Code)
+}
+
+// TestCreateCompany_DuplicateSlug tests creating company with existing slug
+func (s *HierarchyTestSuite) TestCreateCompany_DuplicateSlug() {
+	createReq := models.CreateCompanyRequest{
+		Name:             "Duplicate Slug Company",
+		Slug:             s.company1.Slug, // Existing slug
+		Email:            "contact@duplicate.com",
+		Phone:            "5555555555",
+		SubscriptionPlan: "basic",
+	}
+
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/companies", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.masterToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusConflict, w.Code)
+}
+
+// TestUpdateCompany_Admin tests that admin can update their own company
+func (s *HierarchyTestSuite) TestUpdateCompany_Admin() {
+	updateReq := models.UpdateCompanyRequest{
+		Name:  strPtr("Company One Updated"),
+		Phone: strPtr("9999999999"),
+	}
+
+	body, _ := json.Marshal(updateReq)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/companies/%s", s.company1.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	var company models.Company
+	err := json.Unmarshal(w.Body.Bytes(), &company)
+	s.NoError(err)
+	s.Equal("Company One Updated", company.Name)
+}
+
+// TestDeleteCompany_Master tests that master can delete companies
+func (s *HierarchyTestSuite) TestDeleteCompany_Master() {
+	// Create a company to delete
+	companyToDelete := &models.Company{
+		ID:               uuid.New(),
+		Name:             "To Delete Company",
+		Slug:             "to-delete",
+		Email:            "delete@test.com",
+		Phone:            "6666666666",
+		SubscriptionPlan: "basic",
+	}
+	s.Require().NoError(s.testDB.DB.Create(companyToDelete).Error)
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/companies/%s", companyToDelete.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+s.masterToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusOK, w.Code)
+
+	// Verify company is soft-deleted
+	var deletedCompany models.Company
+	err := s.testDB.DB.Unscoped().First(&deletedCompany, companyToDelete.ID).Error
+	s.NoError(err)
+	s.NotNil(deletedCompany.DeletedAt)
+}
+
+// TestDeleteCompany_Admin tests that admin cannot delete companies
+func (s *HierarchyTestSuite) TestDeleteCompany_Admin() {
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/companies/%s", s.company1.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+s.adminToken)
+	w := httptest.NewRecorder()
+
+	s.router.ServeHTTP(w, req)
+
+	s.Equal(http.StatusForbidden, w.Code)
+}
+
+// Helper function
+func strPtr(s string) *string {
+	return &s
 }

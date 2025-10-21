@@ -1,9 +1,10 @@
-package handlers_test
+﻿package handlers_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,153 +14,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/paulochiaradia/dashtrack/internal/auth"
+	"github.com/paulochiaradia/dashtrack/internal/handlers"
 	"github.com/paulochiaradia/dashtrack/internal/models"
 	"github.com/paulochiaradia/dashtrack/internal/repository"
+	"github.com/paulochiaradia/dashtrack/internal/services"
 	"github.com/paulochiaradia/dashtrack/tests/testutils"
 )
 
-// Helper function for tests
-// Removed stringPtr - using testutils.StringPtr instead
-
-// Mock repositories for testing
-type MockUserRepository struct {
-	mock.Mock
-}
-
-func (m *MockUserRepository) Create(ctx context.Context, user *models.User) error {
-	args := m.Called(ctx, user)
-	return args.Error(0)
-}
-
-func (m *MockUserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
-	args := m.Called(ctx, email)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) Update(ctx context.Context, id uuid.UUID, req models.UpdateUserRequest) (*models.User, error) {
-	args := m.Called(ctx, id, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *MockUserRepository) List(ctx context.Context, limit, offset int, active *bool, roleID *uuid.UUID) ([]*models.User, error) {
-	args := m.Called(ctx, limit, offset, active, roleID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, hashedPassword string) error {
-	args := m.Called(ctx, id, hashedPassword)
-	return args.Error(0)
-}
-
-func (m *MockUserRepository) GetByCompany(ctx context.Context, companyID uuid.UUID, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, companyID, limit, offset)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) UpdateLoginAttempts(ctx context.Context, id uuid.UUID, attempts int, blockedUntil *time.Time) error {
-	args := m.Called(ctx, id, attempts, blockedUntil)
-	return args.Error(0)
-}
-
-func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *MockUserRepository) GetUserContext(ctx context.Context, userID uuid.UUID) (*models.UserContext, error) {
-	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*models.UserContext), args.Error(1)
-}
-
-// Dashboard methods
-func (m *MockUserRepository) CountUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
-	args := m.Called(ctx, companyID)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockUserRepository) CountActiveUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
-	args := m.Called(ctx, companyID)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockUserRepository) Search(ctx context.Context, companyID *uuid.UUID, searchTerm string, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, companyID, searchTerm, limit, offset)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.User), args.Error(1)
-}
-
-// Multi-tenant methods
-func (m *MockUserRepository) ListByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, companyID, roles, limit, offset)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) CountByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string) (int, error) {
-	args := m.Called(ctx, companyID, roles)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockUserRepository) ListByRoles(ctx context.Context, roles []string, limit, offset int) ([]*models.User, error) {
-	args := m.Called(ctx, roles, limit, offset)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*models.User), args.Error(1)
-}
-
-func (m *MockUserRepository) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
-	args := m.Called(ctx, userID, companyID)
-	return args.Error(0)
-}
-
+// MockAuthLogRepository for testing
 type MockAuthLogRepository struct {
 	mock.Mock
 }
 
-func (m *MockAuthLogRepository) Create(authLog *models.AuthLog) error {
-	args := m.Called(authLog)
+func (m *MockAuthLogRepository) Create(log *models.AuthLog) error {
+	args := m.Called(log)
 	return args.Error(0)
-}
-
-func (m *MockAuthLogRepository) GetRecentFailedAttempts(email string, since time.Time) (int, error) {
-	args := m.Called(email, since)
-	return args.Int(0), args.Error(1)
 }
 
 func (m *MockAuthLogRepository) GetByUserID(userID uuid.UUID, limit int) ([]*models.AuthLog, error) {
@@ -170,366 +42,591 @@ func (m *MockAuthLogRepository) GetByUserID(userID uuid.UUID, limit int) ([]*mod
 	return args.Get(0).([]*models.AuthLog), args.Error(1)
 }
 
-// Dashboard methods
-func (m *MockAuthLogRepository) CountLogins(ctx context.Context, companyID *uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, companyID, from, to)
+func (m *MockAuthLogRepository) CountFailedLogins(ctx context.Context, userID *uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) CountSuccessfulLogins(ctx context.Context, companyID *uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, companyID, from, to)
+func (m *MockAuthLogRepository) CountLogins(ctx context.Context, userID *uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) CountFailedLogins(ctx context.Context, companyID *uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, companyID, from, to)
+func (m *MockAuthLogRepository) CountSuccessfulLogins(ctx context.Context, userID *uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) CountUserLogins(ctx context.Context, userID uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, userID, from, to)
+func (m *MockAuthLogRepository) CountUserFailedLogins(ctx context.Context, userID uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) CountUserSuccessfulLogins(ctx context.Context, userID uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, userID, from, to)
+func (m *MockAuthLogRepository) CountUserLogins(ctx context.Context, userID uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) CountUserFailedLogins(ctx context.Context, userID uuid.UUID, from, to time.Time) (int, error) {
-	args := m.Called(ctx, userID, from, to)
+func (m *MockAuthLogRepository) CountUserSuccessfulLogins(ctx context.Context, userID uuid.UUID, startTime time.Time, endTime time.Time) (int, error) {
+	args := m.Called(ctx, userID, startTime, endTime)
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) GetRecentSuccessfulLogins(ctx context.Context, companyID *uuid.UUID, from, to time.Time, limit int) ([]models.RecentLogin, error) {
-	args := m.Called(ctx, companyID, from, to, limit)
+func (m *MockAuthLogRepository) GetRecentFailedAttempts(email string, since time.Time) (int, error) {
+	args := m.Called(email, since)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockAuthLogRepository) GetRecentSuccessfulLogins(ctx context.Context, companyID *uuid.UUID, startTime time.Time, endTime time.Time, limit int) ([]models.RecentLogin, error) {
+	args := m.Called(ctx, companyID, startTime, endTime, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]models.RecentLogin), args.Error(1)
 }
 
-func (m *MockAuthLogRepository) GetUserRecentSuccessfulLogins(ctx context.Context, userID uuid.UUID, from, to time.Time, limit int) ([]models.RecentLogin, error) {
-	args := m.Called(ctx, userID, from, to, limit)
+func (m *MockAuthLogRepository) GetUserRecentSuccessfulLogins(ctx context.Context, userID uuid.UUID, startTime time.Time, endTime time.Time, limit int) ([]models.RecentLogin, error) {
+	args := m.Called(ctx, userID, startTime, endTime, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]models.RecentLogin), args.Error(1)
 }
 
-// JWTManagerInterface defines the contract for JWT manager
-type JWTManagerInterface interface {
-	GenerateTokens(userContext auth.UserContext) (accessToken, refreshToken string, err error)
-	ValidateToken(tokenString string) (*auth.JWTClaims, error)
-	ValidateRefreshToken(tokenString string) (uuid.UUID, error)
-}
-
-type MockJWTManager struct {
+// MockRoleRepository for testing
+type MockRoleRepository struct {
 	mock.Mock
 }
 
-func (m *MockJWTManager) GenerateTokens(userContext auth.UserContext) (accessToken, refreshToken string, err error) {
-	args := m.Called(userContext)
-	return args.String(0), args.String(1), args.Error(2)
-}
-
-func (m *MockJWTManager) ValidateToken(tokenString string) (*auth.JWTClaims, error) {
-	args := m.Called(tokenString)
+func (m *MockRoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Role, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*auth.JWTClaims), args.Error(1)
+	return args.Get(0).(*models.Role), args.Error(1)
 }
 
-func (m *MockJWTManager) ValidateRefreshToken(tokenString string) (uuid.UUID, error) {
-	args := m.Called(tokenString)
-	return args.Get(0).(uuid.UUID), args.Error(1)
+func (m *MockRoleRepository) GetByName(ctx context.Context, name string) (*models.Role, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Role), args.Error(1)
 }
 
-// TestAuthHandler é uma versão testável do AuthHandler que usa interfaces
-type TestAuthHandler struct {
-	userRepo    repository.UserRepositoryInterface
-	authLogRepo repository.AuthLogRepositoryInterface
-	jwtManager  JWTManagerInterface
-	bcryptCost  int
+func (m *MockRoleRepository) List(ctx context.Context) ([]models.Role, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Role), args.Error(1)
 }
 
-// LoginGin implementa o mesmo método do AuthHandler para testes
-func (h *TestAuthHandler) LoginGin(c *gin.Context) {
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+func (m *MockRoleRepository) Create(ctx context.Context, role *models.Role) error {
+	args := m.Called(ctx, role)
+	return args.Error(0)
+}
+
+func (m *MockRoleRepository) Update(ctx context.Context, role *models.Role) error {
+	args := m.Called(ctx, role)
+	return args.Error(0)
+}
+
+func (m *MockRoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockRoleRepository) GetAll(ctx context.Context) ([]*models.Role, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
-		return
+	return args.Get(0).([]*models.Role), args.Error(1)
+}
+
+// MockUserRepositoryForAuth implements UserRepositoryInterface for auth tests
+type MockUserRepositoryForAuth struct {
+	mock.Mock
+}
+
+func (m *MockUserRepositoryForAuth) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	args := m.Called(ctx, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) Create(ctx context.Context, user *models.User) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) Update(ctx context.Context, id uuid.UUID, updateReq models.UpdateUserRequest) (*models.User, error) {
+	args := m.Called(ctx, id, updateReq)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) UpdatePassword(ctx context.Context, id uuid.UUID, hashedPassword string) error {
+	args := m.Called(ctx, id, hashedPassword)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) Delete(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) List(ctx context.Context, limit, offset int, active *bool, roleID *uuid.UUID) ([]*models.User, error) {
+	args := m.Called(ctx, limit, offset, active, roleID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) GetByCompany(ctx context.Context, companyID uuid.UUID, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
+	args := m.Called(ctx, userID, companyID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) UpdateLoginAttempts(ctx context.Context, id uuid.UUID, attempts int, blockedUntil *time.Time) error {
+	args := m.Called(ctx, id, attempts, blockedUntil)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForAuth) GetUserContext(ctx context.Context, userID uuid.UUID) (*models.UserContext, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.UserContext), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) Search(ctx context.Context, companyID *uuid.UUID, searchTerm string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, searchTerm, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) CountUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
+	args := m.Called(ctx, companyID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) CountActiveUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
+	args := m.Called(ctx, companyID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) ListByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, roles, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) ListByRoles(ctx context.Context, roles []string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, roles, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForAuth) CountByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string) (int, error) {
+	args := m.Called(ctx, companyID, roles)
+	return args.Int(0), args.Error(1)
+}
+
+func TestAuthHandler_Login(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	testDB, err := testutils.SetupTestDB("auth_handler_test")
+	require.NoError(t, err)
+	defer testDB.TearDown()
+
+	tokenService := services.NewTokenService(
+		testDB.SqlxDB,
+		"test-secret-key",
+		15*time.Minute,
+		7*24*time.Hour,
+	)
+
+	role := &models.Role{
+		ID:   uuid.New(),
+		Name: "company_admin",
 	}
 
-	clientIP := c.ClientIP()
-	userAgent := c.Request.UserAgent()
-
-	// Get user by email
-	user, err := h.userRepo.GetByEmail(c.Request.Context(), req.Email)
-	if err != nil {
-		// Log failed attempt
-		authLog := &models.AuthLog{
-			ID:            uuid.New(),
-			UserID:        nil,
-			EmailAttempt:  req.Email,
-			Success:       false,
-			IPAddress:     &clientIP,
-			UserAgent:     &userAgent,
-			FailureReason: testutils.StringPtr("invalid_email"),
-		}
-		h.authLogRepo.Create(authLog)
-
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	// Check password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		// Log failed attempt
-		authLog := &models.AuthLog{
-			ID:            uuid.New(),
-			UserID:        &user.ID,
-			EmailAttempt:  req.Email,
-			Success:       false,
-			IPAddress:     &clientIP,
-			UserAgent:     &userAgent,
-			FailureReason: testutils.StringPtr("invalid_password"),
-		}
-		h.authLogRepo.Create(authLog)
-
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	// Generate tokens
-	userContext := auth.UserContext{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Name:     user.Name,
-		RoleID:   user.RoleID,
-		RoleName: user.Role.Name,
-	}
-
-	accessToken, refreshToken, err := h.jwtManager.GenerateTokens(userContext)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tokens"})
-		return
-	}
-
-	// Log successful attempt
-	authLog := &models.AuthLog{
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("ValidPassword123"), bcrypt.DefaultCost)
+	user := &models.User{
 		ID:        uuid.New(),
-		UserID:    &user.ID,
-		Success:   true,
-		IPAddress: &clientIP,
-		UserAgent: &userAgent,
+		Email:     "test@example.com",
+		Name:      "Test User",
+		Password:  string(hashedPassword),
+		Active:    true,
+		RoleID:    role.ID,
+		Role:      role,
+		CompanyID: nil,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-	h.authLogRepo.Create(authLog)
 
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"user": gin.H{
-			"id":    user.ID,
-			"name":  user.Name,
-			"email": user.Email,
-			"role":  user.Role.Name,
-		},
+	err = testDB.DB.Create(role).Error
+	require.NoError(t, err)
+	err = testDB.DB.Create(user).Error
+	require.NoError(t, err)
+
+	t.Run("Successful Login", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
+
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		loginReq := map[string]string{
+			"email":    "test@example.com",
+			"password": "ValidPassword123",
+		}
+		body, _ := json.Marshal(loginReq)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		mockUserRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(user, nil)
+		mockAuthLogRepo.On("Create", mock.AnythingOfType("*models.AuthLog")).Return(nil)
+
+		authHandler.LoginGin(c)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response, "access_token")
+		assert.Contains(t, response, "refresh_token")
+		assert.Contains(t, response, "user")
+
+		mockUserRepo.AssertExpectations(t)
+		mockAuthLogRepo.AssertExpectations(t)
+	})
+
+	t.Run("Invalid Email", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
+
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		loginReq := map[string]string{
+			"email":    "nonexistent@example.com",
+			"password": "ValidPassword123",
+		}
+		body, _ := json.Marshal(loginReq)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		mockUserRepo.On("GetByEmail", mock.Anything, "nonexistent@example.com").Return((*models.User)(nil), errors.New("user not found"))
+		mockUserRepo.On("GetByEmail", mock.Anything, "nonexistent@example.com").Return((*models.User)(nil), repository.ErrUserNotFound)
+		mockAuthLogRepo.On("Create", mock.AnythingOfType("*models.AuthLog")).Return(nil)
+
+		authHandler.LoginGin(c)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		mockUserRepo.AssertExpectations(t)
+	})
+
+	t.Run("Invalid Password", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
+
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		loginReq := map[string]string{
+			"email":    "test@example.com",
+			"password": "WrongPassword",
+		}
+		body, _ := json.Marshal(loginReq)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		mockUserRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(user, nil)
+		mockAuthLogRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.AuthLog")).Return(nil)
+
+		authHandler.LoginGin(c)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		mockUserRepo.AssertExpectations(t)
+	})
+
+	t.Run("Inactive User", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
+
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
+
+		inactiveUser := &models.User{
+			ID:        uuid.New(),
+			Email:     "inactive@example.com",
+			Name:      "Inactive User",
+			Password:  string(hashedPassword),
+			Active:    false,
+			RoleID:    role.ID,
+			Role:      role,
+			CompanyID: nil,
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		loginReq := map[string]string{
+			"email":    "inactive@example.com",
+			"password": "ValidPassword123",
+		}
+		body, _ := json.Marshal(loginReq)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		mockUserRepo.On("GetByEmail", mock.Anything, "inactive@example.com").Return(inactiveUser, nil)
+		mockAuthLogRepo.On("Create", mock.AnythingOfType("*models.AuthLog")).Return(nil)
+
+		authHandler.LoginGin(c)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		mockUserRepo.AssertExpectations(t)
 	})
 }
 
-// Helper function to create test user
-func createTestUser(role string, companyID *uuid.UUID) *models.User {
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), 4)
-	return &models.User{
-		ID:        uuid.New(),
-		Name:      "Test User",
-		Email:     "test@example.com",
-		Password:  string(hashedPassword),
-		RoleID:    uuid.New(),
-		CompanyID: companyID,
+func TestAuthHandler_RefreshToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	testDB, err := testutils.SetupTestDB("auth_handler_refresh_test")
+	require.NoError(t, err)
+	defer testDB.TearDown()
+
+	tokenService := services.NewTokenService(
+		testDB.SqlxDB,
+		"test-secret-key",
+		15*time.Minute,
+		7*24*time.Hour,
+	)
+
+	userID := uuid.New()
+	user := &models.User{
+		ID:    userID,
+		Email: "test@example.com",
+		Name:  "Test User",
 		Role: &models.Role{
-			ID:   uuid.New(),
-			Name: role,
+			Name: "user",
 		},
-		Active: true,
+		CompanyID: &uuid.UUID{},
 	}
-}
+	*user.CompanyID = uuid.New()
 
-// Test cases
-func TestLoginGin_Success(t *testing.T) {
-	// Setup
-	gin.SetMode(gin.TestMode)
-
-	mockUserRepo := new(MockUserRepository)
-	mockAuthLogRepo := new(MockAuthLogRepository)
-	mockJWTManager := new(MockJWTManager)
-
-	handler := &TestAuthHandler{
-		userRepo:    mockUserRepo,
-		authLogRepo: mockAuthLogRepo,
-		jwtManager:  mockJWTManager,
-		bcryptCost:  4, // Low cost for testing
+	userContext := &models.UserContext{
+		UserID:      userID,
+		Email:       "test@example.com",
+		Name:        "Test User",
+		Role:        "user",
+		Permissions: []string{"read:own_data"},
+		CompanyID:   user.CompanyID,
 	}
 
-	// Create test user
-	testUser := createTestUser("admin", nil)
+	refreshToken, err := tokenService.GenerateTokenPair(context.Background(), user, "", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, refreshToken)
 
-	// Setup mocks
-	mockUserRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(testUser, nil)
-	mockAuthLogRepo.On("Create", mock.Anything).Return(nil)
+	t.Run("Successful Refresh", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
 
-	expectedUserContext := auth.UserContext{
-		UserID:   testUser.ID,
-		Email:    testUser.Email,
-		Name:     testUser.Name,
-		RoleID:   testUser.RoleID,
-		RoleName: testUser.Role.Name,
-	}
-	mockJWTManager.On("GenerateTokens", expectedUserContext).Return("access_token", "refresh_token", nil)
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
 
-	// Setup request
-	loginReq := struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}{
-		Email:    "test@example.com",
-		Password: "password123",
-	}
-	jsonBody, _ := json.Marshal(loginReq)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
 
-	req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		reqBody := map[string]string{"refresh_token": refreshToken}
+		body, _ := json.Marshal(reqBody)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
 
-	router := gin.New()
-	router.POST("/auth/login", handler.LoginGin)
+		mockUserRepo.On("GetUserContext", mock.Anything, userID).Return(userContext, nil).Once()
 
-	// Execute
-	router.ServeHTTP(w, req)
+		authHandler.RefreshTokenGin(c)
 
-	// Assert
-	assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var response map[string]string
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response, "access_token")
+		assert.Contains(t, response, "refresh_token")
+		mockUserRepo.AssertExpectations(t)
+	})
 
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "access_token", response["access_token"])
+	t.Run("Invalid Refresh Token", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
 
-	mockUserRepo.AssertExpectations(t)
-	mockAuthLogRepo.AssertExpectations(t)
-	mockJWTManager.AssertExpectations(t)
-}
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
 
-func TestLoginGin_InvalidEmail(t *testing.T) {
-	// Setup
-	gin.SetMode(gin.TestMode)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
 
-	mockUserRepo := new(MockUserRepository)
-	mockAuthLogRepo := new(MockAuthLogRepository)
-	mockJWTManager := new(MockJWTManager)
+		reqBody := map[string]string{"refresh_token": "invalid-token"}
+		body, _ := json.Marshal(reqBody)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
 
-	handler := &TestAuthHandler{
-		userRepo:    mockUserRepo,
-		authLogRepo: mockAuthLogRepo,
-		jwtManager:  mockJWTManager,
-		bcryptCost:  4,
-	}
+		authHandler.RefreshTokenGin(c)
 
-	// Setup mocks - user not found
-	mockUserRepo.On("GetByEmail", mock.Anything, "invalid@example.com").Return(nil, assert.AnError)
-	mockAuthLogRepo.On("Create", mock.Anything).Return(nil)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
 
-	// Setup request
-	loginReq := struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}{
-		Email:    "invalid@example.com",
-		Password: "password123",
-	}
-	jsonBody, _ := json.Marshal(loginReq)
+	t.Run("Missing Refresh Token", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
 
-	req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
 
-	router := gin.New()
-	router.POST("/auth/login", handler.LoginGin)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
 
-	// Execute
-	router.ServeHTTP(w, req)
+		reqBody := map[string]string{}
+		body, _ := json.Marshal(reqBody)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
 
-	// Assert
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+		authHandler.RefreshTokenGin(c)
 
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "Invalid credentials", response["error"])
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
 
-	mockUserRepo.AssertExpectations(t)
-	mockAuthLogRepo.AssertExpectations(t)
-	// JWT manager should not be called for failed authentication
-	mockJWTManager.AssertNotCalled(t, "GenerateTokens")
-}
+	t.Run("User Not Found During Refresh", func(t *testing.T) {
+		mockUserRepo := new(MockUserRepositoryForAuth)
+		mockAuthLogRepo := new(MockAuthLogRepository)
+		mockRoleRepo := new(MockRoleRepository)
 
-func TestLoginGin_InvalidPassword(t *testing.T) {
-	// Setup
-	gin.SetMode(gin.TestMode)
+		authHandler := handlers.NewAuthHandler(
+			mockUserRepo,
+			mockAuthLogRepo,
+			mockRoleRepo,
+			tokenService,
+			nil,
+			bcrypt.DefaultCost,
+		)
 
-	mockUserRepo := new(MockUserRepository)
-	mockAuthLogRepo := new(MockAuthLogRepository)
-	mockJWTManager := new(MockJWTManager)
+		otherUserID := uuid.New()
+		otherUser := &models.User{
+			ID: otherUserID,
+			Role: &models.Role{
+				Name: "user",
+			},
+		}
+		otherRefreshToken, err := tokenService.GenerateTokenPair(context.Background(), otherUser, "", "")
+		require.NoError(t, err)
 
-	handler := &TestAuthHandler{
-		userRepo:    mockUserRepo,
-		authLogRepo: mockAuthLogRepo,
-		jwtManager:  mockJWTManager,
-		bcryptCost:  4,
-	}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
 
-	// Create test user
-	testUser := createTestUser("admin", nil)
+		reqBody := map[string]string{"refresh_token": otherRefreshToken}
+		body, _ := json.Marshal(reqBody)
+		c.Request = httptest.NewRequest("POST", "/api/v1/auth/refresh", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		mockUserRepo.On("GetUserContext", mock.Anything, otherUserID).Return(nil, errors.New("user not found")).Once()
+		mockUserRepo.On("GetUserContext", mock.Anything, otherUserID).Return(nil, repository.ErrUserNotFound).Once()
 
-	// Setup mocks
-	mockUserRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(testUser, nil)
-	mockAuthLogRepo.On("Create", mock.Anything).Return(nil)
+		authHandler.RefreshTokenGin(c)
 
-	// Setup request with wrong password
-	loginReq := struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}{
-		Email:    "test@example.com",
-		Password: "wrongpassword",
-	}
-	jsonBody, _ := json.Marshal(loginReq)
-
-	req := httptest.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	router := gin.New()
-	router.POST("/auth/login", handler.LoginGin)
-
-	// Execute
-	router.ServeHTTP(w, req)
-
-	// Assert
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Equal(t, "Invalid credentials", response["error"])
-
-	mockUserRepo.AssertExpectations(t)
-	mockAuthLogRepo.AssertExpectations(t)
-	// JWT manager should not be called for failed authentication
-	mockJWTManager.AssertNotCalled(t, "GenerateTokens")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		mockUserRepo.AssertExpectations(t)
+	})
 }

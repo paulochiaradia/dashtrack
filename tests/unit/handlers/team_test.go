@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -93,6 +94,43 @@ func (m *MockTeamRepository) CheckMemberExists(ctx context.Context, teamID, user
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockTeamRepository) LogMemberChange(ctx context.Context, history *models.TeamMemberHistory) error {
+	args := m.Called(ctx, history)
+	return args.Error(0)
+}
+
+func (m *MockTeamRepository) GetMemberHistory(ctx context.Context, teamID, companyID uuid.UUID, limit int) ([]models.TeamMemberHistory, error) {
+	args := m.Called(ctx, teamID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.TeamMemberHistory), args.Error(1)
+}
+
+func (m *MockTeamRepository) GetUserTeamHistory(ctx context.Context, userID, companyID uuid.UUID, limit int) ([]models.TeamMemberHistory, error) {
+	args := m.Called(ctx, userID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.TeamMemberHistory), args.Error(1)
+}
+
+func (m *MockTeamRepository) GetMemberHistoryWithDetails(ctx context.Context, teamID, companyID uuid.UUID, limit int) ([]models.TeamMemberHistory, error) {
+	args := m.Called(ctx, teamID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.TeamMemberHistory), args.Error(1)
+}
+
+func (m *MockTeamRepository) GetUserTeamHistoryWithDetails(ctx context.Context, userID, companyID uuid.UUID, limit int) ([]models.TeamMemberHistory, error) {
+	args := m.Called(ctx, userID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.TeamMemberHistory), args.Error(1)
+}
+
 type MockVehicleRepository struct {
 	mock.Mock
 }
@@ -118,6 +156,95 @@ func (m *MockVehicleRepository) UpdateAssignment(ctx context.Context, vehicleID,
 	return args.Error(0)
 }
 
+func (m *MockVehicleRepository) Create(ctx context.Context, vehicle *models.Vehicle) error {
+	args := m.Called(ctx, vehicle)
+	return args.Error(0)
+}
+
+func (m *MockVehicleRepository) GetByLicensePlate(ctx context.Context, licensePlate string, companyID uuid.UUID) (*models.Vehicle, error) {
+	args := m.Called(ctx, licensePlate, companyID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Vehicle), args.Error(1)
+}
+
+func (m *MockVehicleRepository) GetByCompany(ctx context.Context, companyID uuid.UUID, limit, offset int) ([]models.Vehicle, error) {
+	args := m.Called(ctx, companyID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Vehicle), args.Error(1)
+}
+
+func (m *MockVehicleRepository) GetByDriver(ctx context.Context, driverID uuid.UUID, companyID uuid.UUID) ([]models.Vehicle, error) {
+	args := m.Called(ctx, driverID, companyID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Vehicle), args.Error(1)
+}
+
+func (m *MockVehicleRepository) Update(ctx context.Context, vehicle *models.Vehicle) error {
+	args := m.Called(ctx, vehicle)
+	return args.Error(0)
+}
+
+func (m *MockVehicleRepository) Delete(ctx context.Context, id uuid.UUID, companyID uuid.UUID) error {
+	args := m.Called(ctx, id, companyID)
+	return args.Error(0)
+}
+
+func (m *MockVehicleRepository) GetVehicleDashboardData(ctx context.Context, vehicleID, companyID uuid.UUID) (*models.VehicleDashboardData, error) {
+	args := m.Called(ctx, vehicleID, companyID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.VehicleDashboardData), args.Error(1)
+}
+
+func (m *MockVehicleRepository) GetActiveTrip(ctx context.Context, vehicleID uuid.UUID) (*models.VehicleTrip, error) {
+	args := m.Called(ctx, vehicleID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.VehicleTrip), args.Error(1)
+}
+
+func (m *MockVehicleRepository) Search(ctx context.Context, companyID uuid.UUID, searchTerm string, limit, offset int) ([]models.Vehicle, error) {
+	args := m.Called(ctx, companyID, searchTerm, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Vehicle), args.Error(1)
+}
+
+func (m *MockVehicleRepository) CheckLicensePlateExists(ctx context.Context, licensePlate string, companyID uuid.UUID, excludeID *uuid.UUID) (bool, error) {
+	args := m.Called(ctx, licensePlate, companyID, excludeID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockVehicleRepository) LogAssignmentChange(ctx context.Context, history *models.VehicleAssignmentHistory) error {
+	args := m.Called(ctx, history)
+	return args.Error(0)
+}
+
+func (m *MockVehicleRepository) GetAssignmentHistory(ctx context.Context, vehicleID, companyID uuid.UUID, limit int) ([]models.VehicleAssignmentHistory, error) {
+	args := m.Called(ctx, vehicleID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.VehicleAssignmentHistory), args.Error(1)
+}
+
+func (m *MockVehicleRepository) GetAssignmentHistoryWithDetails(ctx context.Context, vehicleID, companyID uuid.UUID, limit int) ([]models.VehicleAssignmentHistory, error) {
+	args := m.Called(ctx, vehicleID, companyID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.VehicleAssignmentHistory), args.Error(1)
+}
+
 type MockUserRepositoryForTeam struct {
 	mock.Mock
 }
@@ -128,6 +255,115 @@ func (m *MockUserRepositoryForTeam) GetByID(ctx context.Context, id uuid.UUID) (
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) Create(ctx context.Context, user *models.User) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	args := m.Called(ctx, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) GetByCompany(ctx context.Context, companyID uuid.UUID, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) Update(ctx context.Context, id uuid.UUID, updateReq models.UpdateUserRequest) (*models.User, error) {
+	args := m.Called(ctx, id, updateReq)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) UpdatePassword(ctx context.Context, id uuid.UUID, hashedPassword string) error {
+	args := m.Called(ctx, id, hashedPassword)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) UpdateCompany(ctx context.Context, userID, companyID uuid.UUID) error {
+	args := m.Called(ctx, userID, companyID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) Delete(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) List(ctx context.Context, limit, offset int, active *bool, roleID *uuid.UUID) ([]*models.User, error) {
+	args := m.Called(ctx, limit, offset, active, roleID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) ListByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, roles, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) ListByRoles(ctx context.Context, roles []string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, roles, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) CountByCompanyAndRoles(ctx context.Context, companyID *uuid.UUID, roles []string) (int, error) {
+	args := m.Called(ctx, companyID, roles)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) UpdateLoginAttempts(ctx context.Context, id uuid.UUID, attempts int, blockedUntil *time.Time) error {
+	args := m.Called(ctx, id, attempts, blockedUntil)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForTeam) GetUserContext(ctx context.Context, userID uuid.UUID) (*models.UserContext, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.UserContext), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) Search(ctx context.Context, companyID *uuid.UUID, searchTerm string, limit, offset int) ([]*models.User, error) {
+	args := m.Called(ctx, companyID, searchTerm, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) CountUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
+	args := m.Called(ctx, companyID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockUserRepositoryForTeam) CountActiveUsers(ctx context.Context, companyID *uuid.UUID) (int, error) {
+	args := m.Called(ctx, companyID)
+	return args.Int(0), args.Error(1)
 }
 
 // ============================================================================
@@ -157,7 +393,7 @@ func setupTeamTestContextWithUser() (*gin.Context, *httptest.ResponseRecorder, u
 	c.Set("company_id", companyID)
 	c.Set("userContext", &models.UserContext{
 		UserID:    userID,
-		CompanyID: companyID,
+		CompanyID: &companyID,
 		Role:      "company_admin",
 	})
 
@@ -477,7 +713,7 @@ func TestUpdateMemberRole(t *testing.T) {
 	mockTeamRepo.On("UpdateMemberRole", mock.Anything, teamID, userID, "manager").Return(nil)
 
 	updateReq := models.UpdateMemberRoleRequest{
-		RoleInTeam: "manager",
+		NewRoleInTeam: "manager",
 	}
 	body, _ := json.Marshal(updateReq)
 

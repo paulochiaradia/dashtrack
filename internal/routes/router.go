@@ -116,12 +116,14 @@ func NewRouter(db *sql.DB, cfg *config.Config) *Router {
 func (r *Router) setupMiddleware() {
 	r.engine.Use(gin.Recovery())
 
+	// Logging middleware - logs all HTTP requests including health checks
+	r.engine.Use(middleware.GinLoggingMiddleware())
+
 	// Audit middleware - logs all HTTP requests automatically
 	// Skips health and metrics endpoints
 	r.engine.Use(middleware.AuditMiddleware(r.auditService))
 
 	// TODO: Add other middlewares when they are implemented
-	// r.engine.Use(middleware.GinLoggingMiddleware())
 	// r.engine.Use(middleware.CORSMiddleware())
 	// r.engine.Use(middleware.RateLimitMiddleware())
 	// r.engine.Use(middleware.SecurityHeaders())

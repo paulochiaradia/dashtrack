@@ -24,13 +24,23 @@ type UserServiceTestSuite struct {
 	mockRoleRepo *mocks.MockRoleRepository
 }
 
+// adapter to add the missing Search method so the generated mock satisfies the repository interface.
+// The Search implementation is a stub because tests in this file don't use Search directly.
+type userRepoAdapter struct {
+	*mocks.MockUserRepository
+}
+
+func (u *userRepoAdapter) Search(ctx context.Context, companyID *uuid.UUID, query string, limit, offset int) ([]*models.User, error) {
+	return nil, nil
+}
+
 func (suite *UserServiceTestSuite) SetupTest() {
 	ctrl := gomock.NewController(suite.T())
 	suite.mockUserRepo = mocks.NewMockUserRepository(ctrl)
 	suite.mockRoleRepo = mocks.NewMockRoleRepository(ctrl)
 
-	// Create UserService with bcryptCost parameter
-	suite.userService = services.NewUserService(suite.mockUserRepo, suite.mockRoleRepo, bcrypt.DefaultCost)
+	// Create UserService with bcryptCost parameter, wrapping the mock to provide the missing Search method.
+	suite.userService = services.NewUserService(&userRepoAdapter{suite.mockUserRepo}, suite.mockRoleRepo, bcrypt.DefaultCost)
 }
 
 func (suite *UserServiceTestSuite) TestCreateUser_Success() {

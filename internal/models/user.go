@@ -215,6 +215,17 @@ type AssignTeamMemberRequest struct {
 	RoleInTeam string    `json:"role_in_team" binding:"required,oneof=manager driver assistant supervisor helper team_lead"`
 }
 
+// UpdateTeamMemberRoleRequest represents request to update a team member's role
+type UpdateTeamMemberRoleRequest struct {
+	NewRoleInTeam string `json:"new_role_in_team" binding:"required,oneof=manager driver assistant supervisor helper team_lead"`
+}
+
+// AddTeamMemberRequest is an alias for AssignTeamMemberRequest
+type AddTeamMemberRequest = AssignTeamMemberRequest
+
+// UpdateMemberRoleRequest is an alias for UpdateTeamMemberRoleRequest
+type UpdateMemberRoleRequest = UpdateTeamMemberRoleRequest
+
 // CreateCompanyUserRequest represents request to create a company user
 type CreateCompanyUserRequest struct {
 	Name     string `json:"name" binding:"required,min=2,max=100"`

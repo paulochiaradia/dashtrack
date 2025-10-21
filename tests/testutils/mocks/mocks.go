@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
-	"github.com/paulochiaradia/dashtrack/internal/auth"
 	"github.com/paulochiaradia/dashtrack/internal/models"
 	"github.com/paulochiaradia/dashtrack/internal/services"
 )
@@ -391,36 +390,36 @@ func (mr *MockJWTManagerMockRecorder) GenerateToken(userID, email, role, company
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateToken", reflect.TypeOf((*MockJWTManager)(nil).GenerateToken), userID, email, role, companyID)
 }
 
-// ValidateToken mocks base method.
-func (m *MockJWTManager) ValidateToken(tokenString string) (*auth.JWTClaims, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateToken", tokenString)
-	ret0, _ := ret[0].(*auth.JWTClaims)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
+// ValidateToken mocks base method - DEPRECATED: Use TokenService instead
+// func (m *MockJWTManager) ValidateToken(tokenString string) (*models.UserContext, error) {
+// 	m.ctrl.T.Helper()
+// 	ret := m.ctrl.Call(m, "ValidateToken", tokenString)
+// 	ret0, _ := ret[0].(*models.UserContext)
+// 	ret1, _ := ret[1].(error)
+// 	return ret0, ret1
+// }
 
 // ValidateToken indicates an expected call of ValidateToken.
-func (mr *MockJWTManagerMockRecorder) ValidateToken(tokenString interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateToken", reflect.TypeOf((*MockJWTManager)(nil).ValidateToken), tokenString)
-}
+// func (mr *MockJWTManagerMockRecorder) ValidateToken(tokenString interface{}) *gomock.Call {
+// 	mr.mock.ctrl.T.Helper()
+// 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateToken", reflect.TypeOf((*MockJWTManager)(nil).ValidateToken), tokenString)
+// }
 
-// GenerateTokens mocks base method.
-func (m *MockJWTManager) GenerateTokens(userContext auth.UserContext) (string, string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateTokens", userContext)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(string)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
+// GenerateTokens mocks base method - DEPRECATED: Use TokenService instead
+// func (m *MockJWTManager) GenerateTokens(userContext models.UserContext) (string, string, error) {
+// 	m.ctrl.T.Helper()
+// 	ret := m.ctrl.Call(m, "GenerateTokens", userContext)
+// 	ret0, _ := ret[0].(string)
+// 	ret1, _ := ret[1].(string)
+// 	ret2, _ := ret[2].(error)
+// 	return ret0, ret1, ret2
+// }
 
 // GenerateTokens indicates an expected call of GenerateTokens.
-func (mr *MockJWTManagerMockRecorder) GenerateTokens(userContext interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTokens", reflect.TypeOf((*MockJWTManager)(nil).GenerateTokens), userContext)
-}
+// func (mr *MockJWTManagerMockRecorder) GenerateTokens(userContext interface{}) *gomock.Call {
+// 	mr.mock.ctrl.T.Helper()
+// 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTokens", reflect.TypeOf((*MockJWTManager)(nil).GenerateTokens), userContext)
+// }
 
 // ValidateRefreshToken mocks base method.
 func (m *MockJWTManager) ValidateRefreshToken(tokenString string) (uuid.UUID, error) {
@@ -437,21 +436,21 @@ func (mr *MockJWTManagerMockRecorder) ValidateRefreshToken(tokenString interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateRefreshToken", reflect.TypeOf((*MockJWTManager)(nil).ValidateRefreshToken), tokenString)
 }
 
-// RefreshToken mocks base method.
-func (m *MockJWTManager) RefreshToken(refreshTokenString string, userContext auth.UserContext) (string, string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshToken", refreshTokenString, userContext)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(string)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
+// RefreshToken mocks base method - DEPRECATED: Use TokenService instead
+// func (m *MockJWTManager) RefreshToken(refreshTokenString string, userContext models.UserContext) (string, string, error) {
+// 	m.ctrl.T.Helper()
+// 	ret := m.ctrl.Call(m, "RefreshToken", refreshTokenString, userContext)
+// 	ret0, _ := ret[0].(string)
+// 	ret1, _ := ret[1].(string)
+// 	ret2, _ := ret[2].(error)
+// 	return ret0, ret1, ret2
+// }
 
 // RefreshToken indicates an expected call of RefreshToken.
-func (mr *MockJWTManagerMockRecorder) RefreshToken(refreshTokenString, userContext interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockJWTManager)(nil).RefreshToken), refreshTokenString, userContext)
-}
+// func (mr *MockJWTManagerMockRecorder) RefreshToken(refreshTokenString, userContext interface{}) *gomock.Call {
+// 	mr.mock.ctrl.T.Helper()
+// 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockJWTManager)(nil).RefreshToken), refreshTokenString, userContext)
+// }
 
 // GeneratePasswordResetToken mocks base method.
 func (m *MockJWTManager) GeneratePasswordResetToken(userID uuid.UUID, email string) (string, error) {
